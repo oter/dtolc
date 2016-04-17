@@ -47,7 +47,6 @@
 
 #include "drivers/pinout.h"
 #include "io.h"
-#include "cgifuncs.h"
 
 #include "netif/tivaif.h"
 
@@ -89,24 +88,136 @@ __error__(char *pcFilename, uint32_t ui32Line)
 }
 #endif
 
+#define STATE_RX_PACKET 5;
+#define STATE_RX_IDLE   10;
+
+#define STATE_TX_PACKET 6;
+#define STATE_TX_IDLE   11;
+
 
 uint8_t uart_rx_buffer[4096];
-uint16_t uart_rx_free = 4096;
-uint16_t uart_rx_alloc = 0;
+volatile uint16_t uart_rx_free = 4096;
+uint16_t uart_rx_data_left = 0;
+uint16_t uart_rx_packet_count_left = 0;
+//uint8_t  uart_rx_state = STATE_RX_IDLE;
 uint8_t* uart_rx_data_ptr = &uart_rx_buffer[0];
 uint8_t* uart_rx_free_ptr = &uart_rx_buffer[0];
 
 uint8_t uart_tx_buffer[4096];
-uint16_t uart_tx_free = 4096;
-uint16_t uart_tx_alloc = 0;
-uint8_t* uart_tx_data_ptr = &uart_rx_buffer[0];
-uint8_t* uart_tx_free_ptr = &uart_rx_buffer[0];
+volatile uint16_t uart_tx_free = 4096;
+uint16_t uart_tx_data_left = 0;
+//uint16_t uart_tx_packet_left = 0;
+//uint8_t  uart_tx_state = STATE_TX_IDLE;
+uint8_t* uart_tx_data_ptr = &uart_tx_buffer[0];
+uint8_t* uart_tx_free_ptr = &uart_tx_buffer[0];
+
+
+uint8_t* get_next_ptr(uint8_t* base, uint8_t* ptr)
+{
+	if (ptr >= base + 4095)
+	{
+		return base;
+	}
+
+	return ptr++;
+}
+
+uint8_t* get_prev_ptr(uint8_t* base, uint8_t* ptr)
+{
+	if (ptr >= base + 4095)
+	{
+		return base;
+	}
+
+	return ptr++;
+}
 
 
 
 // The interrupt handler for the SysTick interrupt.
 void SysTickIntHandler(void)
 {
+	if (uart_tx_data_left)
+	{
+
+		--uart_tx_data_left;
+		uart_tx_free++;
+		ROM_UARTCharPut(UART3_BASE, *uart_tx_data_ptr);
+		uart_tx_data_ptr = get_next_ptr(&uart_tx_buffer[0], uart_tx_data_ptr);
+		if (uart_tx_free > 4096)
+		{
+			uart_tx_free = 4096;
+			UARTprintf("\n\nuart_tx_free OVERFLOW!!!");
+		}
+	}
+
+	if (uart_rx_packet_count_left)
+	{
+		uint16_t length = *((uint16_t*)uart_rx_data_ptr);
+		uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
+		uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
+
+		if (length >= 4096)
+		{
+			UARTprintf("\n\\Invalid packet length!");
+			while(true);
+		}
+		struct pbuf* packet;
+		packet = pbuf_alloc(PBUF_RAW, length, PBUF_POOL);
+		if (packet == NULL)
+		{
+			UARTprintf("\nFrom UART: Cannot allocate pbuf.\n");
+			while(true);
+		}
+
+		uint8_t* data = NULL;
+		data = mem_malloc(length);
+		if (data == NULL)
+		{
+			UARTprintf("\nFrom UART: Cannot allocate buffer.\n");
+			while(true);
+		}
+
+		int iter1 = 0;
+		for (iter1 = 0; iter1 < length; ++iter1)
+		{
+			data[iter1] = *uart_rx_data_ptr;
+			uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
+			uart_rx_free++;
+		}
+
+		if (pbuf_take(packet, data, length) != ERR_OK)
+		{
+			UARTprintf("\nFrom UART: Cannot fill the pbuf packet.\n");
+			return;
+		}
+
+		UARTprintf("To Ethernet: Sending packet. Length: %d\n", length);
+
+		struct netif* interface = lwIPGetNetworkInterface();
+		interface->ip_addr.addr = 0xC0A80022;
+		err_t err = tivaif_transmit(interface, packet);
+		if (err != ERR_OK)
+		{
+			UARTprintf("\nTo Ethernet: Cannot send packet. : %d\n", err);
+		}
+		if (data != NULL)
+		{
+			mem_free(data);
+			data = NULL;
+		}
+
+		pbuf_free(packet);
+
+		if (uart_rx_free > 4096)
+		{
+			uart_rx_free = 4096;
+			UARTprintf("\n\nuart_rx_free OVERFLOW!!!");
+		}
+
+		--uart_rx_packet_count_left;
+	}
+
     // Call the lwIP timer handler.
     //lwIPTimer(SYSTICKMS);
 }
@@ -187,6 +298,13 @@ void lwIPHostTimerHandler(void)
     }
 }
 
+uint8_t rec_packet = 0;
+
+
+uint8_t start_seq[4] = {LASER_DATA_PACKET, LASER_DATA_PACKET + 1, LASER_DATA_PACKET + 2, LASER_DATA_PACKET + 3};
+uint8_t check_at = 0;
+uint16_t packet_length;
+uint8_t* start_buffer = NULL;
 
 void UARTIntHandler3(void)
 {
@@ -198,84 +316,47 @@ void UARTIntHandler3(void)
     // Clear the asserted interrupts.
     ROM_UARTIntClear(UART3_BASE, ui32Status);
 
-    if (!ROM_UARTCharsAvail(UART3_BASE))
+    while(ROM_UARTCharsAvail(UART3_BASE))
     {
-    	return;
-    }
-	uint8_t type = ROM_UARTCharGet(UART3_BASE);
-	if (type == LASER_DATA_PACKET)
-	{
-		int iter = 0;
-		for (iter = 0; iter < 3; ++iter)
+		// Try to detect packet start
+		if (rec_packet == 0)
 		{
-			if (ROM_UARTCharGet(UART3_BASE) != LASER_DATA_PACKET + iter + 1)
+
+			if (ROM_UARTCharGet(UART3_BASE) == start_seq[check_at])
 			{
-				UARTprintf("\nFrom UART: Invalid packet start.\n");
-				return;
+				++check_at;
+				if (check_at == 4)
+				{
+					rec_packet = 1;
+					check_at = 0;
+					continue;
+				}
+			} else
+			{
+				//UARTprintf("\nFrom UART: Invalid packet start.\n");
+				check_at = 0;
+				continue;
 			}
+
+		} else if (rec_packet == 1)
+		{
+			packet_length = 0;
+			((uint8_t*)&packet_length)[0] = ROM_UARTCharGet(UART3_BASE);
+			((uint8_t*)&packet_length)[1] = ROM_UARTCharGet(UART3_BASE);
+			UARTprintf("From UART: Packet: %d;\t", packet_length);
+			if (packet_length >= 4096)
+			{
+				UARTprintf("\n\nFrom UART: Ignoring invalid huge packet %d\n", packet_length);
+				rec_packet = 0;
+			}
+			//if ()
+			rec_packet = 2;
 		}
-	} else
-	{
-		return;
-	}
-
-	uint16_t length;
-	((uint8_t*)&length)[0] = ROM_UARTCharGet(UART3_BASE);
-	((uint8_t*)&length)[1] = ROM_UARTCharGet(UART3_BASE);
-
-	UARTprintf("From UART: Packet: %d;\t", length);
+    }
 
 
-	struct pbuf* packet;
-	packet = pbuf_alloc(PBUF_RAW, length, PBUF_POOL);
-	if (packet == NULL)
-	{
-		UARTprintf("\nFrom UART: Cannot allocate pbuf.\n");
-		while(true);
-	}
-
-	if (length > 8128)
-	{
-		UARTprintf("\n From UART: Receiving HUGE number of the packets.\n");
-	}
-
-	uint8_t* data = NULL;
-	data = mem_malloc(length);
-	if (data == NULL)
-	{
-		UARTprintf("\nFrom UART: Cannot allocate buffer.\n");
-		while(true);
-	}
-
-	int iter1 = 0;
-	for (iter1 = 0; iter1 < length; ++iter1)
-	{
-		data[iter1] = ROM_UARTCharGet(UART3_BASE);
-	}
 
 
-	if (pbuf_take(packet, data, length) != ERR_OK)
-	{
-		UARTprintf("\nFrom UART: Cannot fill the pbuf packet.\n");
-		return;
-	}
-
-	UARTprintf("To Ethernet: Sending packet. Length: %d\n", length);
-
-	struct netif* interface = lwIPGetNetworkInterface();
-	interface->ip_addr.addr = 0xC0A80022;
-	err_t err = tivaif_transmit(interface, packet);
-	if (err != ERR_OK)
-	{
-		UARTprintf("\nTo Ethernet: Cannot send packet. : %d\n", err);
-	}
-	if (data != NULL)
-	{
-		mem_free(data);
-		data = NULL;
-	}
-
-	pbuf_free(packet);
 
 	//ROM_UARTCharPutNonBlocking(UART3_BASE, );
 
@@ -310,7 +391,8 @@ void UARTSend3(struct pbuf *p)
 
 	struct pbuf* to_send = p;
 
-	while(to_send != NULL)
+	uint8_t ui32NumChained = pbuf_clen(to_send);
+	while(ui32NumChained)
 	{
 		//UARTprintf("To UART: Sending sub-packet.\n");
 		uint16_t i;
@@ -318,6 +400,7 @@ void UARTSend3(struct pbuf *p)
 		{
 			ROM_UARTCharPut(UART3_BASE, ((uint8_t*)to_send->payload)[i]);
 		}
+		--ui32NumChained;
 		to_send = to_send->next;
 	}
 }
@@ -333,25 +416,22 @@ err_t callback(struct pbuf *p, struct netif *netif)
 	return ERR_OK;
 }
 
+// Enable UART3
 void InitUART3(void)
 {
-
-	    // Enable UART3
 	    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART3);
 
 	    // Enable processor interrupts.
 	    ROM_IntMasterEnable();
 
-
-	    // Set GPIO A0 and A1 as UART pins.
+	    // Set GPIO A4 and A5 as UART pins.
 	    GPIOPinConfigure(GPIO_PA4_U3RX);
 	    GPIOPinConfigure(GPIO_PA5_U3TX);
 	    ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 
 	    // Configure the UART for 115,200, 8-N-1 operation.
-	    ROM_UARTConfigSetExpClk(UART3_BASE, g_ui32SysClock, 115200,
-	                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
-	                             UART_CONFIG_PAR_NONE));
+	    uint32_t uart_config = UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE;
+	    ROM_UARTConfigSetExpClk(UART3_BASE, g_ui32SysClock, 115200, uart_config);
 
 	    // Enable the UART interrupt.
 	    ROM_IntEnable(INT_UART3);
@@ -365,19 +445,13 @@ int main(void)
     uint8_t pui8MACArray[8];
 
     set_eth_input_callback(&callback);
-    //
-    // Make sure the main oscillator is enabled because this is required by
-    // the PHY.  The system must have a 25MHz crystal attached to the OSC
-    // pins.  The SYSCTL_MOSC_HIGHFREQ parameter is used when the crystal
-    // frequency is 10MHz or higher.
-    //
+
+    // Make sure the main oscillator is enabled because this is required by the PHY.
     SysCtlMOSCConfigSet(SYSCTL_MOSC_HIGHFREQ);
 
     // Run from the PLL at 120 MHz.
-    g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
-                                             SYSCTL_OSC_MAIN |
-                                             SYSCTL_USE_PLL |
-                                             SYSCTL_CFG_VCO_480), 120000000);
+    uint32_t pll_config = SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480;
+    g_ui32SysClock = MAP_SysCtlClockFreqSet(pll_config, 120000000);
 
     // Configure the device pins.
     PinoutSet(true, false);
@@ -400,17 +474,12 @@ int main(void)
     {
         // Let the user know there is no MAC address
         UARTprintf("No MAC programmed!\n");
-
-        while(1)
-        {
-        }
+        while(true);
     }
 
     // Convert the 24/24 split MAC address from NV ram into a 32/16 split
     // MAC address needed to program the hardware registers, then program
     // the MAC address into the Ethernet Controller registers.
-
-
     pui8MACArray[0] = 0x08;
 	pui8MACArray[1] = 0x00;
 	pui8MACArray[2] = 0x28;
@@ -422,58 +491,23 @@ int main(void)
 	// 192.168.0.34
     lwIPInit(g_ui32SysClock, pui8MACArray, 0xC0A80022, 0, 0, IPADDR_USE_DHCP);
 
-
-    //
-    // Setup the device locator service.
-    //
-    //LocatorInit();
-    //LocatorMACAddrSet(pui8MACArray);
-    //LocatorAppTitleSet("EK-TM4C1294XL enet_io");
-
-    //
-    // Initialize a sample httpd server.
-    //
-    //httpd_init();
-
-    // Set the interrupt priorities.  We set the SysTick interrupt to a higher
-    // priority than the Ethernet interrupt to ensure that the file system
-    // tick is processed if SysTick occurs while the Ethernet handler is being
-    // processed.  This is very likely since all the TCP/IP and HTTP work is
-    // done in the context of the Ethernet interrupt.
+    // Set the interrupt priorities.
     MAP_IntPrioritySet(INT_EMAC0, ETHERNET_INT_PRIORITY);
     MAP_IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY);
     MAP_IntPrioritySet(INT_UART3, SYSTICK_INT_PRIORITY);
 
-    //
-    // Pass our tag information to the HTTP server.
-    //
-//    http_set_ssi_handler((tSSIHandler)SSIHandler, g_pcConfigSSITags,
-//            NUM_CONFIG_SSI_TAGS);
-
-    //
-    // Pass our CGI handlers to the HTTP server.
-    //
-    //http_set_cgi_handlers(g_psConfigCGIURIs, NUM_CONFIG_CGI_URIS);
-
-    //
     // Initialize IO controls
-    //
     io_init();
 
     while(1)
     {
         // Wait for a new tick to occur.
-        while(!g_ulFlags)
-        {
-            // Do nothing.
-        }
+        while(!g_ulFlags);
 
         // Clear the flag now that we have seen it.
         HWREGBITW(&g_ulFlags, FLAG_TICK) = 0;
 
         // Toggle the GPIO
-        MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1,
-                (MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^
-                 GPIO_PIN_1));
+        MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, (MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^ GPIO_PIN_1));
     }
 }
