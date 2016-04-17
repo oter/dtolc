@@ -107,14 +107,10 @@ io_set_timer(unsigned long ulSpeedPercent)
 void
 io_init(void)
 {
-    //
     // Configure Port N0 for as an output for the status LED.
-    //
     ROM_GPIOPinTypeGPIOOutput(LED_PORT_BASE, LED_PIN);
 
-    //
     // Configure Port N0 for as an output for the animation LED.
-    //
     ROM_GPIOPinTypeGPIOOutput(LED_ANIM_PORT_BASE, LED_ANIM_PIN);
 
     //

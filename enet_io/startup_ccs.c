@@ -59,6 +59,7 @@ extern uint32_t __STACK_TOP;
 extern void lwIPEthernetIntHandler(void);
 extern void SysTickIntHandler(void);
 extern void AnimTimerIntHandler(void);
+extern void UARTIntHandler3(void);
 
 //*****************************************************************************
 //
@@ -143,7 +144,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port L
     IntDefaultHandler,                      // SSI2 Rx and Tx
     IntDefaultHandler,                      // SSI3 Rx and Tx
-    IntDefaultHandler,                      // UART3 Rx and Tx
+	UARTIntHandler3,                        // UART3 Rx and Tx
     IntDefaultHandler,                      // UART4 Rx and Tx
     IntDefaultHandler,                      // UART5 Rx and Tx
     IntDefaultHandler,                      // UART6 Rx and Tx
