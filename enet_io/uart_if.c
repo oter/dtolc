@@ -28,17 +28,11 @@
 
 #define LASER_DATA_PACKET 99
 
-#define STATE_RX_PACKET 5;
-#define STATE_RX_IDLE   10;
-
-#define STATE_TX_PACKET 6;
-#define STATE_TX_IDLE   11;
-
 #define BUFFER_SIZE 4096
 
 
 uint8_t uart_rx_buffer[BUFFER_SIZE];
-uint16_t uart_rx_free = BUFFER_SIZE;
+volatile uint16_t uart_rx_free = BUFFER_SIZE;
 uint16_t uart_rx_packet_count_left = 0;
 //uint8_t  uart_rx_state = STATE_RX_IDLE;
 uint8_t* uart_rx_data_ptr = &uart_rx_buffer[0];
@@ -60,6 +54,7 @@ uint16_t GetUartTxFree()
 
 uint8_t* get_next_ptr(uint8_t* base, uint8_t* ptr)
 {
+	UARTprintf("Addrds: %p %p\n", base, ptr);
 	uint32_t addr1 = (uint32_t)ptr;
 	uint32_t addr2 = (uint32_t)base + BUFFER_SIZE - 1;
 	if (addr1 == addr2)
@@ -74,18 +69,21 @@ static uint8_t* FillBufferTx(uint8_t* base, uint8_t* ptr, const uint8_t* data, u
 {
 	if (BUFFER_SIZE - (ptr - base) > len)
 	{
-		//UARTprintf("Simple\n");
-		uint16_t i = 0;
+		//UARTprintf("SimpleTx\n");
+		int i = 0;
 		for (i = 0; i < len; ++i)
 		{
+			//*ptr = 0;
+			//*ptr = data[i];
+			//UARTprintf("%d", i);
 			*ptr = data[i];
 			++ptr;
 		}
 		uart_tx_free -= len;
-		//UARTprintf("Simple end\n");
+		//UARTprintf("Simple endTx\n");
 		return ptr;
 	}
-	//UARTprintf("Hard1\n");
+	//UARTprintf("Hard1Tx\n");
 	uint16_t i = 0;
 	uint16_t di = 0;
 	uint16_t len1 = base + BUFFER_SIZE - ptr;
@@ -96,7 +94,7 @@ static uint8_t* FillBufferTx(uint8_t* base, uint8_t* ptr, const uint8_t* data, u
 		++ptr;
 		++di;
 	}
-	//UARTprintf("Hard2\n");
+	//UARTprintf("Hard2Tx\n");
 	for (i = 0; i < len2; ++i)
 	{
 		*base = data[di];
@@ -109,8 +107,9 @@ static uint8_t* FillBufferTx(uint8_t* base, uint8_t* ptr, const uint8_t* data, u
 
 static uint8_t* FillBufferRx(uint8_t* base, uint8_t* ptr, const uint8_t* data, uint16_t len)
 {
-	if (ptr + BUFFER_SIZE - base >= len)
+	if (BUFFER_SIZE - (ptr - base) > len)
 	{
+		//UARTprintf("SimpleRx\n");
 		uint16_t i = 0;
 		for (i = 0; i < len; ++i)
 		{
@@ -118,8 +117,10 @@ static uint8_t* FillBufferRx(uint8_t* base, uint8_t* ptr, const uint8_t* data, u
 			++ptr;
 		}
 		uart_rx_free -= len;
+		//UARTprintf("Simple endRx\n");
 		return ptr;
 	}
+	//UARTprintf("Hard1Rx\n");
 	uint16_t i = 0;
 	uint16_t di = 0;
 	uint16_t len1 = base + BUFFER_SIZE - ptr;
@@ -136,6 +137,7 @@ static uint8_t* FillBufferRx(uint8_t* base, uint8_t* ptr, const uint8_t* data, u
 		++base;
 		++di;
 	}
+	//UARTprintf("Hard2Rx\n");
 	uart_rx_free = uart_rx_free - len1 - len2;
 	return base;
 }
@@ -156,29 +158,36 @@ typedef struct
 void SysTickIntHandler(void)
 {
 	uint8_t c = 0;
-	for (c = 0; c < 24; ++c)
+	for (c = 0; c < 1; ++c)
 	{
 		if (uart_tx_free < BUFFER_SIZE)
 		{
 			uart_tx_free++;
 			ROM_UARTCharPut(UART3_BASE, *uart_tx_data_ptr);
 			uart_tx_data_ptr = get_next_ptr(&uart_tx_buffer[0], uart_tx_data_ptr);
-			if (uart_tx_free > BUFFER_SIZE)
-			{
-				uart_tx_free = BUFFER_SIZE;
-				UARTprintf("\n\nuart_tx_free OVERFLOW!!!");
-			}
+//			if (uart_tx_free > BUFFER_SIZE)
+//			{
+//				uart_tx_free = BUFFER_SIZE;
+//
+//			}
 		} else
 		{
-			break;
+			if (uart_tx_free > BUFFER_SIZE)
+			{
+				UARTprintf("\n\nuart_tx_free OVERFLOW!!!\n");
+				while(true);
+			}
 		}
 	}
 
 	if (uart_rx_packet_count_left)
 	{
-		uint16_t length = *((uint16_t*)uart_rx_data_ptr);
+		uint16_t length = 0;
+		((uint8_t*)&length)[0] = *uart_rx_data_ptr;
 		uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
+		((uint8_t*)&length)[1] = *uart_rx_data_ptr;
 		uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
+
 		uart_rx_free += 2;
 
 		if (length >= BUFFER_SIZE)
@@ -229,14 +238,13 @@ void SysTickIntHandler(void)
 		if (uart_rx_free > BUFFER_SIZE)
 		{
 			uart_rx_free = BUFFER_SIZE;
-			UARTprintf("\n\nuart_rx_free OVERFLOW!!!");
+			UARTprintf("\nuart_rx_free OVERFLOW!!!\n");
 		}
 
 		--uart_rx_packet_count_left;
 	}
 
-    // Call the lwIP timer handler.
-    //lwIPTimer(SYSTICKMS);
+	//HWREG(NVIC_SW_TRIG) |= INT_EMAC0 - 16;
 }
 
 // Enable UART3
@@ -283,7 +291,7 @@ void UARTIntHandler3(void)
     // Clear the asserted interrupts.
     ROM_UARTIntClear(UART3_BASE, ui32Status);
 
-    if (ui32Status & UART_INT_RX)
+    if (ui32Status)
     {
     	while(ROM_UARTCharsAvail(UART3_BASE))
 		{
@@ -340,16 +348,19 @@ void UARTIntHandler3(void)
 						rec_packet = STATE_WAITING_START;
 						uart_rx_free_ptr = start_buffer;
 						uart_rx_free += 2 + rec_packet_size;
+						//UARTprintf
 						UARTprintf("\n\nFrom UART: Invalid checksum!\n", rec_packet_size);
 						continue;
 					} else
 					{
+						rec_packet = STATE_WAITING_START;
 						++uart_rx_packet_count_left;
-						UARTprintf("From UART: receive packet%d\n", rec_packet_size);
+						UARTprintf("From UART: receive packet: %d\n", rec_packet_size);
 						continue;
 					}
 				}
 				uint8_t d = ROM_UARTCharGet(UART3_BASE);
+				rec_packet_checksum += d;
 				uart_rx_free_ptr = FillBufferRx(&uart_rx_buffer[0], uart_rx_free_ptr, &d, 1);
 				++rec_packet_size;
 			}
@@ -395,39 +406,45 @@ void UARTSend3(struct pbuf *p)
 
 err_t SendPacket(struct pbuf* packet)
 {
-	UARTprintf("Send packet0\n");
+	UARTprintf("Send packet\n");
+	//UARTprintf("Send packet0\n");
 	//packet->tot_len + start_packet + packet_len + checksum
 	if (uart_tx_free < packet->tot_len + 4 + 2 + 1)
 	{
-		UARTprintf("-> UART: Not enough memory. Need %d, has %d;\t ", packet->tot_len, uart_tx_free);
+		UARTprintf("-> UART: Not enough memory. Need %d, has %d;\t \n", packet->tot_len, uart_tx_free);
 		return ERR_MEM;
 	}
+
 
 	//UARTprintf("-> UART:Packet %d, mem %d\n", packet->tot_len, uart_tx_free);
 
 	// Fill start of the packet
 	uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, &packet_start[0], 4);
+
 	// Fill length of the packet
 	uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, (uint8_t*)&packet->tot_len, 2);
 
+
+
 	uint8_t check_sum = 0;
 	struct pbuf* current = packet;
-	UARTprintf("Send packet1\n");
+	//UARTprintf("Send packet1\n");
 	while(current != NULL)
 	{
 		uint16_t i = 0;
-		for (i = 0; i < packet->len; ++i)
+		for (i = 0; i < current->len; ++i)
 		{
-			check_sum += ((uint8_t*)packet->payload)[i];
+			check_sum += ((uint8_t*)current->payload)[i];
 		}
-		uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, packet->payload, packet->len);
+		//UARTprintf("\nPayload length: %d\n", current->len);
+		uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, current->payload, current->len);
 		current = current->next;
 	}
-	UARTprintf("Send packet2\n");
+	//UARTprintf("Send packet2\n");
 	// Fill checksum
 	uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, &check_sum, 1);
 
-	UARTprintf("Send packet end\n");
+	//UARTprintf("Send packet end\n");
 
 	return ERR_OK;
 }

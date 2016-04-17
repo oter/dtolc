@@ -135,7 +135,7 @@ void lwIPHostTimerHandler(void)
     }
 }
 
-uint8_t test_data[65];
+
 
 err_t OnReceivePacket(struct pbuf* packet)
 {
@@ -164,6 +164,9 @@ err_t callback(struct pbuf *p, struct netif *netif)
 	return ERR_OK;
 }
 
+#define TEST_SIZE 512
+uint8_t test_data[TEST_SIZE];
+
 struct pbuf* test_packet = NULL;
 
 int main(void)
@@ -189,7 +192,7 @@ int main(void)
     UARTIfInit(g_ui32SysClock);
 
     // Configure SysTick for a periodic interrupt.
-    MAP_SysTickPeriodSet(g_ui32SysClock / SYSTICKHZ);
+    MAP_SysTickPeriodSet(g_ui32SysClock / 100);
     MAP_SysTickEnable();
     MAP_SysTickIntEnable();
 
@@ -226,7 +229,7 @@ int main(void)
     // Initialize IO controls
     io_init();
 
-    test_packet = pbuf_alloc(PBUF_RAW, 65, PBUF_POOL);
+    test_packet = pbuf_alloc(PBUF_RAW, TEST_SIZE, PBUF_POOL);
     if (test_packet == NULL)
     {
     	UARTprintf("Cannot allocate test data buffer");
@@ -234,12 +237,12 @@ int main(void)
     }
 
     uint16_t i = 0;
-    for (i = 0; i < 65; ++i)
+    for (i = 0; i < TEST_SIZE; ++i)
     {
     	test_data[i] = i;
     }
 
-   err_t err = pbuf_take(test_packet, test_data, 65);
+   err_t err = pbuf_take(test_packet, test_data, TEST_SIZE);
    if (err != ERR_OK)
    {
 	   UARTprintf("Cannot fill data p_buffer");
