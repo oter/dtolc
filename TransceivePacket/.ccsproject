@@ -4,10 +4,12 @@
 	<deviceVariant value="Cortex M.TM4C129ENCPDT"/>
 	<deviceFamily value="TMS470"/>
 	<deviceEndianness value="little"/>
-	<codegenToolVersion value="5.2.6"/>
+	<codegenToolVersion value="15.12.1.LTS"/>
 	<isElfFormat value="true"/>
+	<connection value="common/targetdb/connections/Stellaris_ICDI_Connection.xml"/>
+	<linkerCommandFile value="tm4c129encpdt.cmd"/>
 	<rts value="libc.a"/>
 	<createSlaveProjects value=""/>
-	<origin value="D:/Programs/ti/TivaWare_C_Series-2.1.2.111/examples/boards/ek-tm4c129exl/hello/ccs"/>
-	<isTargetManual value="true"/>
+	<templateProperties value="id=com.ti.common.project.core.emptyProjectWithMainTemplate,"/>
+	<isTargetManual value="false"/>
 </projectOptions>

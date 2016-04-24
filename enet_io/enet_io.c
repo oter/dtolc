@@ -41,8 +41,8 @@
 
 // Interrupt priority definitions.  The top 3 bits of these values are
 // significant with lower values indicating higher priority interrupts.
-#define SYSTICK_INT_PRIORITY    0x80
-#define ETHERNET_INT_PRIORITY   0xC0
+#define SYSTICK_INT_PRIORITY    0xC0
+#define ETHERNET_INT_PRIORITY   0x80
 
 //*****************************************************************************
 //
@@ -135,19 +135,20 @@ void lwIPHostTimerHandler(void)
     }
 }
 
-
-
 err_t OnReceivePacket(struct pbuf* packet)
 {
-	//UARTprintf("To Ethernet: Sending packet. Length: %d\n", packet->tot_len);
-
+	UARTprintf("-> E: %d;", packet->tot_len);
+	//EMACTxDMAPollDemand(EMAC0_BASE);
+	//ROM_EMACIntEnable(EMAC0_BASE, EMAC_INT_TRANSMIT);
 	struct netif* interface = lwIPGetNetworkInterface();
 	interface->ip_addr.addr = 0xC0A80022;
-	//err_t err = tivaif_transmit(interface, packet);
-//	if (err != ERR_OK)
-//	{
-//		UARTprintf("\nTo Ethernet: Cannot send packet. : %d\n", err);
-//	}
+	err_t err = tivaif_transmit(interface, packet);
+	if (err != ERR_OK)
+	{
+		UARTprintf("-> Ethernet: Cannot send packet. : %d\n", err);
+	}
+
+	pbuf_free(packet);
 
 	return ERR_OK;
 }
@@ -155,26 +156,21 @@ err_t OnReceivePacket(struct pbuf* packet)
 
 err_t callback(struct pbuf *p, struct netif *netif)
 {
-
-	//UARTprintf("From Ethernet: Packet: %d;\t ", p->tot_len);
-	//UARTSend3(p);
+	UARTprintf("E: %d; -> ", p->tot_len);
+	SendPacket(p);
 
 	pbuf_free(p);
 
 	return ERR_OK;
 }
 
-#define TEST_SIZE 512
-uint8_t test_data[TEST_SIZE];
-
-struct pbuf* test_packet = NULL;
-
 int main(void)
-{
+ {
     uint32_t ui32User0, ui32User1;
     uint8_t pui8MACArray[8];
 
     set_eth_input_callback(&callback);
+
 
     // Make sure the main oscillator is enabled because this is required by the PHY.
     SysCtlMOSCConfigSet(SYSCTL_MOSC_HIGHFREQ);
@@ -187,9 +183,10 @@ int main(void)
     PinoutSet(true, false);
 
     // Configure debug port for internal use.
-    UARTStdioConfig(0, 115200, g_ui32SysClock);
+    UARTStdioConfig(0, 230400, g_ui32SysClock);
 
     UARTIfInit(g_ui32SysClock);
+    UARTprintf("Start\n");
 
     // Configure SysTick for a periodic interrupt.
     MAP_SysTickPeriodSet(g_ui32SysClock / 100);
@@ -222,40 +219,20 @@ int main(void)
     lwIPInit(g_ui32SysClock, pui8MACArray, 0xC0A80022, 0, 0, IPADDR_USE_DHCP);
 
     // Set the interrupt priorities.
-    MAP_IntPrioritySet(INT_EMAC0, ETHERNET_INT_PRIORITY);
-    MAP_IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY);
-    MAP_IntPrioritySet(INT_UART3, SYSTICK_INT_PRIORITY);
+    MAP_IntPrioritySet(INT_EMAC0, 0x20);
+    //MAP_IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY);
+    //MAP_IntPrioritySet(INT_UART3, SYSTICK_INT_PRIORITY);
 
     // Initialize IO controls
     io_init();
 
-    test_packet = pbuf_alloc(PBUF_RAW, TEST_SIZE, PBUF_POOL);
-    if (test_packet == NULL)
-    {
-    	UARTprintf("Cannot allocate test data buffer");
-    	while(true);
-    }
-
-    uint16_t i = 0;
-    for (i = 0; i < TEST_SIZE; ++i)
-    {
-    	test_data[i] = i;
-    }
-
-   err_t err = pbuf_take(test_packet, test_data, TEST_SIZE);
-   if (err != ERR_OK)
-   {
-	   UARTprintf("Cannot fill data p_buffer");
-	   while(true);
-   }
-
-
     while(1)
     {
+
         // Wait for a new tick to occur.
         while(!g_ulFlags);
 
-        SendPacket(test_packet);
+        //SendPacket(test_packet);
 
         // Clear the flag now that we have seen it.
         HWREGBITW(&g_ulFlags, FLAG_TICK) = 0;
@@ -263,6 +240,4 @@ int main(void)
         // Toggle the GPIO
         MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, (MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^ GPIO_PIN_1));
     }
-
-   pbuf_free(test_packet);
 }

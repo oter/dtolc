@@ -47,8 +47,8 @@
 #define EMAC_PHY_CONFIG (EMAC_PHY_TYPE_INTERNAL | EMAC_PHY_INT_MDIX_EN |      \
                          EMAC_PHY_AN_100B_T_FULL_DUPLEX)
 #define PHY_PHYS_ADDR      0
-#define NUM_TX_DESCRIPTORS 24
-#define NUM_RX_DESCRIPTORS 8
+//#define NUM_TX_DESCRIPTORS 24
+//#define NUM_RX_DESCRIPTORS 8
 
 //*****************************************************************************
 //

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>hello</name>
+	<name>TransceivePacket</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -26,49 +26,30 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>drivers/buttons.c</name>
+			<name>utils/cpu_usage.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/buttons.c</locationURI>
+			<location>D:/test/TivaWare_C_Series-2.1.2.111_new/utils/cpu_usage.c</location>
 		</link>
 		<link>
-			<name>drivers/buttons.h</name>
+			<name>utils/ringbuf.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/buttons.h</locationURI>
+			<location>D:/test/TivaWare_C_Series-2.1.2.111_new/utils/ringbuf.c</location>
 		</link>
 		<link>
-			<name>drivers/http.c</name>
+			<name>utils/scheduler.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/http.c</locationURI>
-		</link>
-		<link>
-			<name>drivers/http.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/http.h</locationURI>
-		</link>
-		<link>
-			<name>drivers/pinout.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/pinout.c</locationURI>
-		</link>
-		<link>
-			<name>drivers/pinout.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/board_files/drivers/pinout.h</locationURI>
+			<location>D:/test/TivaWare_C_Series-2.1.2.111_new/utils/scheduler.c</location>
 		</link>
 		<link>
 			<name>utils/uartstdio.c</name>
 			<type>1</type>
-			<locationURI>SW_ROOT/utils/uartstdio.c</locationURI>
+			<location>D:/test/TivaWare_C_Series-2.1.2.111_new/utils/uartstdio.c</location>
 		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
-			<name>ORIGINAL_PROJECT_ROOT</name>
-			<value>file:/D:/Programs/ti/TivaWare_C_Series-2.1.2.111/examples/boards/ek-tm4c129exl/hello/ccs</value>
-		</variable>
-		<variable>
 			<name>SW_ROOT</name>
-			<value>$%7BPARENT-5-ORIGINAL_PROJECT_ROOT%7D</value>
+			<value>file:/D:/test/TivaWare_C_Series-2.1.2.111_new</value>
 		</variable>
 	</variableList>
 </projectDescription>

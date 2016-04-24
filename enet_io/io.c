@@ -64,7 +64,7 @@ extern uint32_t g_ui32SysClock;
 // The current speed of the on-screen animation expressed as a percentage.
 //
 //*****************************************************************************
-volatile unsigned long g_ulAnimSpeed = 10;
+volatile unsigned long g_ulAnimSpeed = 15;
 
 //*****************************************************************************
 //

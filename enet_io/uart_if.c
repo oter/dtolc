@@ -26,9 +26,55 @@
 #include "utils/uartstdio.h"
 #include "utils/ustdlib.h"
 
+#define AUX_BUFFER_SIZE 2048
+
+uint8_t aux_buffer[AUX_BUFFER_SIZE];
+uint16_t aux_buffer_write_index = 0;
+uint16_t aux_buffer_read_index = 0;
+uint16_t aux_buffer_free = AUX_BUFFER_SIZE;
+
+bool aux_data_available()
+{
+	return aux_buffer_free != AUX_BUFFER_SIZE;
+}
+
+uint8_t aux_get_char()
+{
+	if ((!aux_data_available()) || aux_buffer_free > AUX_BUFFER_SIZE)
+	{
+		UARTprintf("AUX data underrun\n");
+		while(true);
+	}
+	uint8_t ret = aux_buffer[aux_buffer_read_index];
+	++aux_buffer_read_index;
+	if (aux_buffer_read_index == AUX_BUFFER_SIZE)
+	{
+		aux_buffer_read_index = 0;
+	}
+	++aux_buffer_free;
+	return ret;
+}
+
+void aux_put_char(uint8_t c)
+{
+	if (aux_buffer_free == 0)
+	{
+		UARTprintf("AUX data overrun\n");
+		while(true);
+	}
+	aux_buffer[aux_buffer_write_index] = c;
+	++aux_buffer_write_index;
+	if (aux_buffer_write_index == AUX_BUFFER_SIZE)
+	{
+		aux_buffer_write_index = 0;
+	}
+
+	--aux_buffer_free;
+}
+
 #define LASER_DATA_PACKET 99
 
-#define BUFFER_SIZE 4096
+const uint32_t BUFFER_SIZE = 16384;
 
 
 uint8_t uart_rx_buffer[BUFFER_SIZE];
@@ -45,6 +91,8 @@ volatile uint16_t uart_tx_free = BUFFER_SIZE;
 uint8_t* uart_tx_data_ptr = &uart_tx_buffer[0];
 uint8_t* uart_tx_free_ptr = &uart_tx_buffer[0];
 
+void UARTIntHandler3(void);
+
 const uint8_t packet_start[4] = {LASER_DATA_PACKET, LASER_DATA_PACKET + 2, LASER_DATA_PACKET + 50, LASER_DATA_PACKET - 80};
 
 uint16_t GetUartTxFree()
@@ -54,7 +102,7 @@ uint16_t GetUartTxFree()
 
 uint8_t* get_next_ptr(uint8_t* base, uint8_t* ptr)
 {
-	UARTprintf("Addrds: %p %p\n", base, ptr);
+	//UARTprintf("Addrds: %p %p\n", base, ptr);
 	uint32_t addr1 = (uint32_t)ptr;
 	uint32_t addr2 = (uint32_t)base + BUFFER_SIZE - 1;
 	if (addr1 == addr2)
@@ -153,32 +201,115 @@ typedef struct
 
 } laser_packet_t;
 
+int sent = 0;
+
+
+#define STATE_WAITING_START 10
+#define STATE_READ_SIZE1 20
+#define STATE_READ_SIZE2 25
+#define STATE_READ_PACKET 30
+
+uint8_t rec_packet = STATE_WAITING_START;
+uint8_t check_at = 0;
+uint16_t packet_length;
+uint16_t rec_packet_size = 0;
+uint8_t rec_packet_checksum = 0;
+uint8_t* start_buffer = NULL;
+
+#define SYSTICKHZ               100
+#define SYSTICKMS               (1000 / SYSTICKHZ)
 
 // The interrupt handler for the SysTick interrupt.
 void SysTickIntHandler(void)
 {
-	uint8_t c = 0;
-	for (c = 0; c < 1; ++c)
+	lwIPTimer(SYSTICKMS);
+}
+
+void ProcessTimerHandler(void)
+{
+	MAP_IntDisable(INT_TIMER0A);
+	MAP_TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+	while(aux_data_available())
 	{
-		if (uart_tx_free < BUFFER_SIZE)
+		uint8_t c = aux_get_char();
+		// Try to detect packet start
+		if (rec_packet == STATE_WAITING_START)
 		{
-			uart_tx_free++;
-			ROM_UARTCharPut(UART3_BASE, *uart_tx_data_ptr);
-			uart_tx_data_ptr = get_next_ptr(&uart_tx_buffer[0], uart_tx_data_ptr);
-//			if (uart_tx_free > BUFFER_SIZE)
-//			{
-//				uart_tx_free = BUFFER_SIZE;
-//
-//			}
-		} else
-		{
-			if (uart_tx_free > BUFFER_SIZE)
+			if (c == packet_start[check_at])
 			{
-				UARTprintf("\n\nuart_tx_free OVERFLOW!!!\n");
-				while(true);
+				++check_at;
+				if (check_at == 4)
+				{
+					rec_packet = STATE_READ_SIZE1;
+					check_at = 0;
+					continue;
+				}
+			} else
+			{
+				//UARTprintf("\nFrom UART: Invalid packet start.\n");
+				check_at = 0;
+				continue;
+			}
+		}
+		else if (rec_packet == STATE_READ_SIZE1)
+		{
+			rec_packet = STATE_READ_SIZE2;
+			packet_length = 0;
+			((uint8_t*)&packet_length)[0] = c;
+		}
+		else if (rec_packet == STATE_READ_SIZE2)
+		{
+			((uint8_t*)&packet_length)[1] = c;
+			UARTprintf("UART: %d; ", packet_length);
+			if (packet_length >= BUFFER_SIZE)
+			{
+				UARTprintf("\n\nFrom UART: Ignoring invalid huge packet %d\n", packet_length);
+				rec_packet = STATE_WAITING_START;
+				continue;
+			}
+			if (packet_length > uart_rx_free)
+			{
+				UARTprintf("\n\nFrom UART: Not enough memory %d\n", packet_length);
+				rec_packet = STATE_WAITING_START;
+				continue;
+			}
+			start_buffer = uart_rx_free_ptr;
+			rec_packet = STATE_READ_PACKET;
+			uart_rx_free_ptr = FillBufferRx(&uart_rx_buffer[0], uart_rx_free_ptr, (uint8_t*)&packet_length, 2);
+			rec_packet_size = 0;
+			rec_packet_checksum = 0;
+		}
+		else if (rec_packet == STATE_READ_PACKET)
+		{
+			if (rec_packet_size == packet_length)
+			{
+				uint8_t checksum = c;
+				if (rec_packet_checksum != checksum)
+				{
+					rec_packet = STATE_WAITING_START;
+					uart_rx_free_ptr = start_buffer;
+					uart_rx_free += 2 + rec_packet_size;
+					//UARTprintf
+					UARTprintf("invalid checksum!\n", rec_packet_size);
+					continue;
+				} else
+				{
+					rec_packet = STATE_WAITING_START;
+					++uart_rx_packet_count_left;
+					UARTprintf("receive;\n");
+					continue;
+				}
+			} else
+			{
+				uint8_t d = c;
+				rec_packet_checksum += d;
+				uart_rx_free_ptr = FillBufferRx(&uart_rx_buffer[0], uart_rx_free_ptr, &d, 1);
+				++rec_packet_size;
 			}
 		}
 	}
+
 
 	if (uart_rx_packet_count_left)
 	{
@@ -188,11 +319,9 @@ void SysTickIntHandler(void)
 		((uint8_t*)&length)[1] = *uart_rx_data_ptr;
 		uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
 
-		uart_rx_free += 2;
-
 		if (length >= BUFFER_SIZE)
 		{
-			UARTprintf("\n\\Invalid packet length!");
+			UARTprintf("\nInvalid packet length!");
 			while(true);
 		}
 		struct pbuf* packet;
@@ -216,7 +345,6 @@ void SysTickIntHandler(void)
 		{
 			data[iter1] = *uart_rx_data_ptr;
 			uart_rx_data_ptr = get_next_ptr(&uart_rx_buffer[0], uart_rx_data_ptr);
-			uart_rx_free++;
 		}
 
 		if (pbuf_take(packet, data, length) != ERR_OK)
@@ -224,6 +352,8 @@ void SysTickIntHandler(void)
 			UARTprintf("\nFrom UART: Cannot fill the pbuf packet.\n");
 			return;
 		}
+
+		uart_rx_free += 2 + length;
 
 		OnReceivePacket(packet);
 
@@ -244,130 +374,117 @@ void SysTickIntHandler(void)
 		--uart_rx_packet_count_left;
 	}
 
+	MAP_IntEnable(INT_TIMER0A);
+
+	MAP_SysTickIntEnable();
+
 	//HWREG(NVIC_SW_TRIG) |= INT_EMAC0 - 16;
 }
 
-// Enable UART3
+
 void UARTIfInit(uint32_t sys_clock)
 {
-	ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART3);
+	aux_buffer_write_index = 0;
+	aux_buffer_read_index = 0;
+	aux_buffer_free = AUX_BUFFER_SIZE;
+
+	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART4);
+	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+
+
+	// Process timer
+	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+	MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+	MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, sys_clock / 40000);
+	MAP_IntEnable(INT_TIMER0A);
+	MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+	MAP_TimerEnable(TIMER0_BASE, TIMER_A);
+
+	MAP_IntPrioritySet(INT_TIMER0A, 0x20);
 
 	// Enable processor interrupts.
-	ROM_IntMasterEnable();
+	MAP_IntMasterEnable();
 
 	// Set GPIO A4 and A5 as UART pins.
-	GPIOPinConfigure(GPIO_PA4_U3RX);
-	GPIOPinConfigure(GPIO_PA5_U3TX);
-	ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+	GPIOPinConfigure(GPIO_PK0_U4RX);
+	GPIOPinConfigure(GPIO_PK1_U4TX);
+	MAP_GPIOPinTypeUART(GPIO_PORTK_BASE, GPIO_PIN_0 | GPIO_PIN_1);
 
+	//921600
+	//460800
 	// Configure the UART for 115,200, 8-N-1 operation.
-	uint32_t uart_config = UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE;
-	ROM_UARTConfigSetExpClk(UART3_BASE, sys_clock, 115200, uart_config);
+	uint32_t uart_config = (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | UART_CONFIG_PAR_ODD);
+	MAP_UARTConfigSetExpClk(UART4_BASE, sys_clock, 921600, uart_config);
+
+	UARTTxIntModeSet(UART4_BASE, UART_TXINT_MODE_FIFO);
+
+	UARTEnable(UART4_BASE);
+	UARTFIFOEnable(UART4_BASE); //Add
+	UARTFIFOLevelSet(UART4_BASE, UART_FIFO_TX4_8, UART_FIFO_RX4_8);
+
+	MAP_IntPrioritySet(INT_UART4, 0);
 
 	// Enable the UART interrupt.
-	ROM_IntEnable(INT_UART3);
-	ROM_UARTIntEnable(UART3_BASE, UART_INT_RX | UART_INT_RT);
+	MAP_IntEnable(INT_UART4);
+	MAP_UARTIntEnable(UART4_BASE, (UART_INT_RX | UART_INT_RT | UART_INT_TX));
 }
 
-
-#define STATE_WAITING_START 10
-#define STATE_READ_SIZE 20
-#define STATE_READ_PACKET 30
-
-uint8_t rec_packet = STATE_WAITING_START;
-uint8_t check_at = 0;
-uint16_t packet_length;
-uint16_t rec_packet_size = 0;
-uint8_t rec_packet_checksum = 0;
-uint8_t* start_buffer = NULL;
-
-void UARTIntHandler3(void)
+void UARTIntHandler4(void)
 {
+	//if (MAP_IntTrigger())
+	if (!IntIsEnabled(INT_UART4))
+	{
+		UARTprintf("\n\n\n\nLogic error");
+		while(true);
+	}
+	MAP_IntDisable(INT_UART4);
     uint32_t ui32Status;
 
     // Get the interrrupt status.
-    ui32Status = ROM_UARTIntStatus(UART3_BASE, true);
+    ui32Status = MAP_UARTIntStatus(UART4_BASE, true);
 
     // Clear the asserted interrupts.
-    ROM_UARTIntClear(UART3_BASE, ui32Status);
+    MAP_UARTIntClear(UART4_BASE, ui32Status);
 
-    if (ui32Status)
+    uint32_t err = UARTRxErrorGet(UART4_BASE);
+
+    if (err != 0)
     {
-    	while(ROM_UARTCharsAvail(UART3_BASE))
-		{
-			// Try to detect packet start
-			if (rec_packet == STATE_WAITING_START)
-			{
-				if (ROM_UARTCharGet(UART3_BASE) == packet_start[check_at])
-				{
-					++check_at;
-					if (check_at == 4)
-					{
-						rec_packet = STATE_READ_SIZE;
-						check_at = 0;
-						continue;
-					}
-				} else
-				{
-					//UARTprintf("\nFrom UART: Invalid packet start.\n");
-					check_at = 0;
-					continue;
-				}
-			}
-			else if (rec_packet == STATE_READ_SIZE)
-			{
-				packet_length = 0;
-				((uint8_t*)&packet_length)[0] = ROM_UARTCharGet(UART3_BASE);
-				((uint8_t*)&packet_length)[1] = ROM_UARTCharGet(UART3_BASE);
-				UARTprintf("From UART: Packet: %d;\t", packet_length);
-				if (packet_length >= BUFFER_SIZE)
-				{
-					UARTprintf("\n\nFrom UART: Ignoring invalid huge packet %d\n", packet_length);
-					rec_packet = STATE_WAITING_START;
-					continue;
-				}
-				if (packet_length > uart_rx_free)
-				{
-					UARTprintf("\n\nFrom UART: Ignoring invalid huge packet %d\n", packet_length);
-					rec_packet = STATE_WAITING_START;
-					continue;
-				}
-				start_buffer = uart_rx_free_ptr;
-				rec_packet = STATE_READ_PACKET;
-				uart_rx_free_ptr = FillBufferRx(&uart_rx_buffer[0], uart_rx_free_ptr, (uint8_t*)&packet_length, 2);
-				rec_packet_size = 0;
-				rec_packet_checksum = 0;
-			}
-			else if (rec_packet == STATE_READ_PACKET)
-			{
-				if (rec_packet_size == packet_length)
-				{
-					uint8_t checksum = ROM_UARTCharGet(UART3_BASE);
-					if (rec_packet_checksum != checksum)
-					{
-						rec_packet = STATE_WAITING_START;
-						uart_rx_free_ptr = start_buffer;
-						uart_rx_free += 2 + rec_packet_size;
-						//UARTprintf
-						UARTprintf("\n\nFrom UART: Invalid checksum!\n", rec_packet_size);
-						continue;
-					} else
-					{
-						rec_packet = STATE_WAITING_START;
-						++uart_rx_packet_count_left;
-						UARTprintf("From UART: receive packet: %d\n", rec_packet_size);
-						continue;
-					}
-				}
-				uint8_t d = ROM_UARTCharGet(UART3_BASE);
-				rec_packet_checksum += d;
-				uart_rx_free_ptr = FillBufferRx(&uart_rx_buffer[0], uart_rx_free_ptr, &d, 1);
-				++rec_packet_size;
-			}
-		}
+    	if (err & UART_RXERROR_OVERRUN)
+    	{
+    		UARTprintf("UART OVERRUN\n");
+    	} else
+    	{
+    		static uint32_t errs_count = 0;
+    		errs_count++;
+    	}
+
+    	UARTRxErrorClear(UART4_BASE);
     }
 
-	//ROM_UARTCharPutNonBlocking(UART3_BASE, );
+    while(MAP_UARTCharsAvail(UART4_BASE))
+	{
+		uint8_t c = MAP_UARTCharGetNonBlocking(UART4_BASE);
+		aux_put_char(c);
+		//MAP_UARTCharPutNonBlocking(UART4_BASE, c);
+	}
+
+    while (MAP_UARTSpaceAvail(UART4_BASE) && uart_tx_free < BUFFER_SIZE)
+	{
+		MAP_UARTCharPutNonBlocking(UART4_BASE, *uart_tx_data_ptr);
+		uart_tx_data_ptr = get_next_ptr(&uart_tx_buffer[0], uart_tx_data_ptr);
+
+		if (uart_tx_free > BUFFER_SIZE)
+		{
+			UARTprintf("\n\nuart_tx_free OVERFLOW!!!\n");
+			while(true);
+		}
+		uart_tx_free++;
+	}
+
+    MAP_IntEnable(INT_UART4);
+
+	//ROM_UARTCharPutNonBlocking(UART4_BASE, );
 	// Blink the LED to show a character transfer is occuring.
 	//GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
 	// Delay for 1 millisecond.  Each SysCtlDelay is about 3 clocks.
@@ -376,37 +493,9 @@ void UARTIntHandler3(void)
    // GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, 0);
 }
 
-void UARTSend3(struct pbuf *p)
-{
-	ROM_UARTCharPut(UART3_BASE, LASER_DATA_PACKET);
-	ROM_UARTCharPut(UART3_BASE, LASER_DATA_PACKET + 1);
-	ROM_UARTCharPut(UART3_BASE, LASER_DATA_PACKET + 2);
-	ROM_UARTCharPut(UART3_BASE, LASER_DATA_PACKET + 3);
-
-	ROM_UARTCharPut(UART3_BASE, ((uint8_t*)&p->tot_len)[0]);
-	ROM_UARTCharPut(UART3_BASE, ((uint8_t*)&p->tot_len)[1]);
-
-	UARTprintf("-> UART: Sending packet.\n");
-
-	struct pbuf* to_send = p;
-
-	uint8_t ui32NumChained = pbuf_clen(to_send);
-	while(ui32NumChained)
-	{
-		//UARTprintf("To UART: Sending sub-packet.\n");
-		uint16_t i;
-		for (i = 0; i < to_send->len; ++i)
-		{
-			ROM_UARTCharPut(UART3_BASE, ((uint8_t*)to_send->payload)[i]);
-		}
-		--ui32NumChained;
-		to_send = to_send->next;
-	}
-}
-
 err_t SendPacket(struct pbuf* packet)
 {
-	UARTprintf("Send packet\n");
+	UARTprintf("UART send\n");
 	//UARTprintf("Send packet0\n");
 	//packet->tot_len + start_packet + packet_len + checksum
 	if (uart_tx_free < packet->tot_len + 4 + 2 + 1)
@@ -415,7 +504,6 @@ err_t SendPacket(struct pbuf* packet)
 		return ERR_MEM;
 	}
 
-
 	//UARTprintf("-> UART:Packet %d, mem %d\n", packet->tot_len, uart_tx_free);
 
 	// Fill start of the packet
@@ -423,8 +511,6 @@ err_t SendPacket(struct pbuf* packet)
 
 	// Fill length of the packet
 	uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, (uint8_t*)&packet->tot_len, 2);
-
-
 
 	uint8_t check_sum = 0;
 	struct pbuf* current = packet;
@@ -443,9 +529,14 @@ err_t SendPacket(struct pbuf* packet)
 	//UARTprintf("Send packet2\n");
 	// Fill checksum
 	uart_tx_free_ptr = FillBufferTx(&uart_tx_buffer[0], uart_tx_free_ptr, &check_sum, 1);
+	//UARTIntClear()Enable(UART4_BASE, UART_INT_TX);
+//	MAP_IntEnable(INT_UART4);
+//	MAP_UARTIntEnable(UART4_BASE, (UART_INT_TX | UART_INT_RX | UART_INT_RT));
+	//UARTIntHandler3();
+
+	HWREG(NVIC_SW_TRIG) |= INT_UART4 - 16;
 
 	//UARTprintf("Send packet end\n");
-
 	return ERR_OK;
 }
 
