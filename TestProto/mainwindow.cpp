@@ -27,7 +27,7 @@ void MainWindow::on_pushButton_3_clicked()
 {
     QString str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     QByteArray data;
-    auto size = rand() % 1024;
+    auto size = rand() % 8000;
     for (int i = 0; i < size; ++i)
     {
         data.append(rand() % 255);

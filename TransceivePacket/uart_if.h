@@ -6,12 +6,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define UART_DMA_RX_BLOCK_SIZE 32
-#define UART_DMA_RX_BLOCKS_COUNT 512
+#define UART_RX_BLOCK_SIZE 32
+#define UART_RX_BLOCKS_COUNT 512
 
 extern void InitUartInterface(uint32_t sys_clock);
-
-
 
 
 

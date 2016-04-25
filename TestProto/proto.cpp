@@ -94,8 +94,8 @@ bool Proto::Send(const QByteArray &data)
 
 void Proto::Connect()
 {
-    this->setPortName("COM3");
-    this->setBaudRate(460800);
+    this->setPortName("COM12");
+    this->setBaudRate(921600);
     this->setDataBits(DataBits::Data8);
     this->setStopBits(StopBits::OneStop);
     this->setParity(Parity::NoParity);
