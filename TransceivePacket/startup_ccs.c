@@ -60,6 +60,7 @@ extern void UART1IntHandler(void);
 extern void uDMAIntHandler(void);
 extern void uDMAErrorHandler(void);
 extern void ProcessTimerHandler(void);
+extern void EthernetIntHandler(void);
 //*****************************************************************************
 //
 // The vector table.  Note that the proper constructs must be placed on this to
@@ -127,7 +128,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // I2C1 Master and Slave
     IntDefaultHandler,                      // CAN0
     IntDefaultHandler,                      // CAN1
-    IntDefaultHandler,                      // Ethernet
+	EthernetIntHandler,                     // Ethernet
     IntDefaultHandler,                      // Hibernate
     IntDefaultHandler,                      // USB0
     IntDefaultHandler,                      // PWM Generator 3
