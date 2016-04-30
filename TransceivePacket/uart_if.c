@@ -167,7 +167,7 @@ void InitUartInterface(uint32_t sys_clock)
 
 	// Put the attributes in a known state for the uDMA UART1RX channel.  These
 	// should already be disabled by default.
-	uint32_t dma_config =  /*UDMA_ATTR_ALTSELECT |*/ UDMA_ATTR_USEBURST | UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK;
+	uint32_t dma_config =  UDMA_ATTR_ALTSELECT | UDMA_ATTR_USEBURST | UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK;
 	uDMAChannelAttributeDisable(UDMA_CHANNEL_UART1RX, dma_config);
 	uint32_t dma_control = UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_8 | UDMA_ARB_4;
 	uDMAChannelControlSet(dma_rx_primary, dma_control);
@@ -176,7 +176,7 @@ void InitUartInterface(uint32_t sys_clock)
 	// Put the attributes in a known state for the uDMA UART1TX channel.  These
 	// should already be disabled by default.
 //    uDMAChannelAttributeDisable(UDMA_CHANNEL_UART1TX,
-//                                    //UDMA_ATTR_ALTSELECT |
+//                                    UDMA_ATTR_ALTSELECT |
 //                                    UDMA_ATTR_HIGH_PRIORITY |
 //                                    UDMA_ATTR_REQMASK);
 
