@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
@@ -19,23 +20,14 @@
 #include "utils/ustdlib.h"
 
 #include "uart_if.h"
-
-
+#include "ethernet/eth_if.h"
 
 
 // System clock rate in Hz.
-uint32_t g_ui32SysClock;
+uint32_t system_clock_freq;
 
 // The number of SysTick ticks per second used for the SysTick interrupt.
 #define SYSTICKS_PER_SECOND     100
-
-// The size of the UART transmit and receive buffers.  They do not need to be
-// the same size.
-#define UART_TXBUF_SIZE         256
-
-// The transmit and receive buffers used for the UART transfers.  There is one
-// transmit buffer and a pair of recieve ping-pong buffers.
-static uint8_t g_ui8TxBuf[UART_TXBUF_SIZE];
 
 // The number of seconds elapsed since the start of the program.  This value is
 // maintained by the SysTick interrupt handler.
@@ -44,8 +36,7 @@ static uint32_t g_ui32Seconds = 0;
 // The CPU usage in percent, in 16.16 fixed point format.
 static uint32_t g_ui32CPUUsage;
 
-// The control table used by the uDMA controller.  This table must be aligned
-// to a 1024 byte boundary.
+// The control table used by the uDMA controller with a 1024 byte boundary alignment
 #if defined(ewarm)
 #pragma data_alignment=1024
 uint8_t pui8ControlTable[1024];
@@ -64,9 +55,6 @@ __error__(char *pcFilename, uint32_t ui32Line)
 }
 #endif
 
-// The interrupt handler for the SysTick timer.  This handler will increment a
-// seconds counter whenever the appropriate number of ticks has occurred.  It
-// will also call the CPU usage tick function to find the CPU usage percent.
 void SysTickHandler(void)
 {
     static uint32_t ui32TickCount = 0;
@@ -97,16 +85,13 @@ void ConfigureUART(void)
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
 
     // Initialize the UART for console I/O.
-    UARTStdioConfig(0, 115200, g_ui32SysClock);
+    UARTStdioConfig(0, 115200, system_clock_freq);
 }
 
 int main(void)
 {
-    // Set the clocking to run directly from the crystal at 120MHz.
-    g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
-                                             SYSCTL_OSC_MAIN |
-                                             SYSCTL_USE_PLL |
-                                             SYSCTL_CFG_VCO_480), 120000000);
+	uint32_t system_config = SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN | SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480;
+    system_clock_freq = MAP_SysCtlClockFreqSet(system_config, 120000000);
 
     // Enable peripherals to operate when CPU is in sleep.
     SysCtlPeripheralClockGating(true);
@@ -117,20 +102,17 @@ int main(void)
     // Enable the GPIO pins for the LED (PN0).
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
 
-    // Initialize the UART.
     ConfigureUART();
-
-    // Show statistics headings.
     UARTprintf("-----START-----\n");
 
     // Configure SysTick to occur 100 times per second, to use as a time
     // reference.  Enable SysTick to generate interrupts.
-    SysTickPeriodSet(g_ui32SysClock / SYSTICKS_PER_SECOND);
+    SysTickPeriodSet(system_clock_freq / SYSTICKS_PER_SECOND);
     SysTickIntEnable();
     SysTickEnable();
 
     // Initialize the CPU usage measurement routine.
-    CPUUsageInit(g_ui32SysClock, SYSTICKS_PER_SECOND, 2);
+    CPUUsageInit(system_clock_freq, SYSTICKS_PER_SECOND, 2);
 
     // Enable the uDMA controller at the system level.  Enable it to continue
     // to run while the processor is in sleep.
@@ -148,14 +130,15 @@ int main(void)
     uDMAControlBaseSet(pui8ControlTable);
 
     // Initialize the uDMA UART transfers.
-    InitUartInterface(g_ui32SysClock);
+    InitUartInterface(system_clock_freq);
 
-    // Loop forever with the CPU not sleeping, so the debugger can connect.
+    InitEthInterface(system_clock_freq);
+
     while(1)
     {
         GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
-        SysCtlDelay(g_ui32SysClock / 20 / 3);
+        SysCtlDelay(system_clock_freq / 20 / 3);
         GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, 0);
-        SysCtlDelay(g_ui32SysClock / 20 / 3);
+        SysCtlDelay(system_clock_freq / 20 / 3);
     }
 }
