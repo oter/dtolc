@@ -51,9 +51,6 @@ uint16_t rec_packet_start_index = 0;
 uint16_t rec_packet_end_index = 0;
 uint16_t current_index = 0;
 
-static uint32_t dma_errors_count = 0;
-static uint32_t dma_bad_ints = 0;
-
 uint16_t GetDMABlockIndex(uint16_t raw_index)
 {
 	return raw_index % UART_RX_BLOCK_SIZE;
@@ -111,32 +108,6 @@ void UART1IntHandler(void)
 //        // The uDMA TX channel must be re-enabled.
 //        uDMAChannelEnable(UDMA_CHANNEL_UART1TX);
 //    }
-}
-
-// The interrupt handler for uDMA errors.  This interrupt will occur if the
-// uDMA encounters a bus error while trying to perform a transfer.  This
-// handler just increments a counter if an error occurs.
-void uDMAErrorHandler(void)
-{
-    uint32_t ui32Status;
-    ui32Status = uDMAErrorStatusGet();
-    if(ui32Status)
-    {
-        uDMAErrorStatusClear();
-        dma_errors_count++;
-    }
-}
-
-void uDMAIntHandler(void)
-{
-    uint32_t mode = uDMAChannelModeGet(UDMA_CHANNEL_SW);
-    if(mode == UDMA_MODE_STOP)
-    {
-    }
-    else
-    {
-        dma_bad_ints++;
-    }
 }
 
 void InitUartInterface(uint32_t sys_clock)
@@ -266,7 +237,7 @@ void ProcessTimerHandler(void)
 		{
 			((uint8_t*)&packet_length)[1] = c;
 			UARTprintf("UART: %d; ", packet_length);
-			if (packet_length >= 16182)
+			if (packet_length >= 2500)
 			{
 				UARTprintf("Ignoring invalid huge packet %d\n", packet_length);
 				state = STATE_WAITING_START;

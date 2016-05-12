@@ -57,8 +57,8 @@ extern uint32_t __STACK_TOP;
 // To be added by user
 extern void SysTickHandler(void);
 extern void UART1IntHandler(void);
-extern void uDMAIntHandler(void);
-extern void uDMAErrorHandler(void);
+extern void udma_int_handler(void);
+extern void udma_error_handler(void);
 extern void ProcessTimerHandler(void);
 extern void EthernetIntHandler(void);
 //*****************************************************************************
@@ -132,8 +132,8 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Hibernate
     IntDefaultHandler,                      // USB0
     IntDefaultHandler,                      // PWM Generator 3
-	uDMAIntHandler,                         // uDMA Software Transfer
-	uDMAErrorHandler,                       // uDMA Error
+	udma_int_handler,                       // uDMA Software Transfer
+	udma_error_handler,                     // uDMA Error
     IntDefaultHandler,                      // ADC1 Sequence 0
     IntDefaultHandler,                      // ADC1 Sequence 1
     IntDefaultHandler,                      // ADC1 Sequence 2

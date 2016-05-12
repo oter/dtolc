@@ -41,14 +41,10 @@
 
 #include <stdint.h>
 
+#include "err.h"
 #include "laser_packet.h"
 
-typedef enum
-{
-	ERR_OK,
-	ERR_MEM,
 
-} err_t;
 
 typedef err_t (*eth_input_fn)(packet_data* p);
 
