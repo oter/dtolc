@@ -42,5 +42,24 @@ always @(posedge c0 or negedge i_rst_n) begin
 	end
 end
 
+wire [7:0] tx_i_data;
+wire tx_i_data_we;
+wire [15:0] tx_o_data_count;
+wire [7:0] tx_o_frames_count;
+wire [7:0] tx_o_status;
+wire [7:0] tx_o_tx;
+
+m_transmitter tx_inst(
+	.i_clk(i_clk),
+	.i_clk_2x(x0),
+	.i_rst_n(i_rst_n),
+	.i_data(tx_i_data),
+	.i_data_we(tx_i_data_we),
+	.o_data_count(tx_o_data_count),
+	.o_frames_count(tx_o_frames_count),
+	.o_status(tx_o_status),
+	.o_tx(tx_o_tx)
+);
+
 
 endmodule
