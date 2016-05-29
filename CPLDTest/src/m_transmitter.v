@@ -2,6 +2,8 @@ module m_transmitter(
 	i_clk,
 	i_clk_2x,
 	i_rst_n,
+	i_push_write_index,
+	i_pop_write_index,
 	i_data,
 	i_data_we,
 	i_push_frame,
@@ -11,55 +13,74 @@ module m_transmitter(
 	o_tx
 );
 
-input i_clk; // done
-input i_clk_2x; // done
-input i_rst_n; // done
-input [7:0] i_data; // done
-input i_data_we; // done
+input i_clk;
+input i_clk_2x;
+input i_rst_n;
+input [7:0] i_data;
+input i_data_we;
 input i_push_frame;
-output [15:0] o_data_size; // done
-output [7:0] o_frames_count; // done
-output [7:0] o_status; // TODO
-output o_tx; // done
+output [15:0] o_data_size;
+output [7:0] o_frames_count;
+output [15:0] o_status;
+output o_tx;
+
+// Status register
+wire [15:0] status_wires;
+reg [15:0] status;
+
+always @(posedge i_clk or negedge i_rst_n) begin
+	if (!i_rst_n) begin
+		status <= 16'b0;
+	end else begin
+		status <= status_wires;
+	end
+end
 
 parameter PREAMBLE_SIZE = 64;
 parameter START_SIZE 	= 2;
 parameter DATA_SIZE 	= 8;
 parameter GAP_SIZE 		= 16;
 
-reg cb_read_en; // done
-//wire [7:0] cb_i_data; 
-wire [7:0] cb_o_data; // done
-wire [15:0] cb_o_data_size; // done
+reg cb_read_en;
+wire [7:0] cb_o_data;
+wire [15:0] cb_o_data_size;
 wire cb_underrun;
 wire cb_overrun;
+wire cb_stack_overrun;
+wire cb_invalid_operation;
+wire cb_invalid_write_index;
  
 circullar_buffer cb_inst(
 	.i_clk(i_clk),
 	.i_rst_n(i_rst_n),
+	.i_push_write_index(i_push_write_index),
+	.i_pop_write_index(i_pop_write_index),
 	.i_write_en(i_data_we),
 	.i_read_en(cb_read_en),
 	.i_data(i_data),
 	.o_data(cb_o_data),
 	.o_data_size(cb_o_data_size),
 	.o_underrun(cb_underrun),
-	.o_overrun(cb_overrun)
+	.o_overrun(cb_overrun),
+	.o_stack_overrun(cb_stack_overrun),
+	.o_invalid_operation(cb_invalid_operation),
+	.o_invalid_write_index(cb_invalid_write_index)
   ); 
 
 reg [7:0] frames_count;
-reg [7:0] processed_frames_count; // done
-reg [7:0] tx_buffer; // done
-reg [7:0] tx_counter; // done
-reg [15:0] data_size; // done
-reg [15:0] data_size_counter; // done
-reg tx_en; // done
-reg bad_state; // done
-
-reg tx; // done
+reg [7:0] processed_frames_count;
+reg [7:0] tx_buffer;
+reg [7:0] tx_counter;
+reg [15:0] data_size;
+reg [15:0] data_size_counter;
+reg tx_en;
+reg tx;
+reg bad_state;
 
 assign tx_bit = tx_buffer[0];
 
-always @(posedge i_clk or negedge i_rst_n) begin
+// TODO: posedge i_clk_2x or i_clk??
+always @(posedge i_clk_2x or negedge i_rst_n) begin
 	if (!i_rst_n) begin
 		frames_count <= 8'b0;
 	end else begin
@@ -71,22 +92,14 @@ always @(posedge i_clk or negedge i_rst_n) begin
 	end
 end
 
-// state
-// processed_frames_count
-// tx_en
-// tx_buffer
-// tx_counter
-// bad_state
-
-reg [3:0] state, next_state;
+reg [3:0] state;
 localparam 	STATE_IDLE = 0, STATE_PREAMBLE = 1, STATE_START = 2, STATE_DATA_SIZE_0 = 3, 
-		   	STATE_DATA_SIZE_1 = 4, STATE_DATA = 5, STATE_DATA_BYTE = 6, STATE_GAP = 7;
+		   	STATE_DATA_SIZE_1 = 4, STATE_DATA_BYTE = 5, STATE_GAP = 6;
 
 // FSM
 always @(posedge i_clk or negedge i_rst_n) begin
 	if (!i_rst_n) begin
 		state <= STATE_IDLE;
-
 		processed_frames_count <= 8'b0;
 		tx_buffer <= 8'b0;
 		data_size <= 16'b0;
@@ -100,7 +113,6 @@ always @(posedge i_clk or negedge i_rst_n) begin
 			STATE_IDLE: begin
 				if (frames_count == processed_frames_count) begin
 					state <= STATE_IDLE;
-					processed_frames_count <= processed_frames_count;
 					tx_en <= 1'b0;
 				end else begin
 					state <= STATE_PREAMBLE;
@@ -111,7 +123,6 @@ always @(posedge i_clk or negedge i_rst_n) begin
 				data_size <= 16'b0;
 				tx_counter <= 1'b1;
 				data_size_counter <= 16'b0;
-				bad_state <= bad_state;
 				cb_read_en <= 1'b0;
 			end
 			STATE_PREAMBLE: begin
@@ -124,11 +135,9 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					state <= STATE_PREAMBLE;
 					tx_buffer <= 8'b0;
 				end
-				processed_frames_count <= processed_frames_count;
 				tx_en <= 1'b1;	
 				data_size <= 16'b0;
 				data_size_counter <= 16'b0;
-				bad_state <= bad_state;
 				cb_read_en <= 1'b0;
 			end
 			STATE_START: begin
@@ -144,10 +153,8 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					tx_buffer <= 8'b00000001;
 					cb_read_en <= 1'b0;
 				end
-				processed_frames_count <= processed_frames_count;
 				tx_en <= 1'b1;
-				data_size_counter <= 16'b0;			
-				bad_state <= bad_state;
+				data_size_counter <= 16'b0;
 			end
 			STATE_DATA_SIZE_0: begin
 				if (tx_counter == DATA_SIZE) begin
@@ -162,10 +169,8 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
 					cb_read_en <= 1'b0;
 				end
-				processed_frames_count <= processed_frames_count;
 				tx_en <= 1'b1;
-				data_size_counter <= 16'b0;		
-				bad_state <= bad_state;
+				data_size_counter <= 16'b0;
 			end
 			STATE_DATA_SIZE_1: begin
 				if (tx_counter == DATA_SIZE) begin
@@ -181,13 +186,8 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
 					cb_read_en <= 1'b0;
 				end
-				processed_frames_count <= processed_frames_count;
-				tx_en <= 1'b1;				
-				bad_state <= bad_state;
+				tx_en <= 1'b1;
 			end
-			// STATE_DATA: begin
-				
-			// end
 			STATE_DATA_BYTE: begin
 				if (tx_counter == DATA_SIZE) begin
 					tx_counter <= 8'b01; 
@@ -205,13 +205,10 @@ always @(posedge i_clk or negedge i_rst_n) begin
 				end else begin
 					state <= STATE_DATA_BYTE;
 					tx_counter <= tx_counter + 1'b1;
-					data_size_counter <= data_size_counter;
 					tx_en <= 1'b1;
 					cb_read_en <= 1'b0;
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
-				end					
-				processed_frames_count <= processed_frames_count;				
-				bad_state <= bad_state;	
+				end
 			end
 			STATE_GAP: begin
 				if (tx_counter == GAP_SIZE) begin
@@ -220,14 +217,11 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					state <= STATE_GAP;
 				end
 				tx_en <= 1'b0;
-				data_size_counter <= data_size_counter;
 				tx_counter <= tx_counter + 1'b1;
-				processed_frames_count <= processed_frames_count;			
-				bad_state <= bad_state;
 				cb_read_en <= 1'b0;
 			end
 			default: begin
-				state <= STATE_IDLE; // Return from the undefined state
+				state <= STATE_IDLE; // return from the undefined state
 				bad_state <= 1'b1;
 			end
 		endcase
@@ -247,19 +241,27 @@ always @(negedge i_clk_2x or negedge i_rst_n) begin
 	end
 end
 
-// always @(posedge clk or negedge i_rst_n) begin
-// 	if (!i_rst_n) begin
-// 		state <= STATE_IDLE; // Initial state
-// 	end else begin
-// 		state <= next_state; // Switch to the next state
-// 	end
-// end
-
 assign o_frames_count = frames_count;
-//assign o_status = status;
 assign o_tx = tx;
-
 assign o_data_size = cb_o_data_size;
+assign o_status = status;
 
+assign status_wires[15] = data_size == 0;			// 1 - No data to transmit, 0 - data is available
+assign status_wires[14] = frames_count != 0; 		// 1 - frames are available, 0 - no frames
+assign status_wires[13] = state != STATE_IDLE; 		// 1 - transmitting, 0 - idle
+assign status_wires[12] = 0;
+assign status_wires[11] = state[3];					// state bit 3
+assign status_wires[10] = state[2];					// state bit 2
+assign status_wires[9] = state[1];					// state bit 1
+assign status_wires[8] = state[0];					// state bit 0
+
+assign status_wires[7] = 0;
+assign status_wires[6] = 0;
+assign status_wires[5] = bad_state;					// 1 - returned from the undefined state 
+assign status_wires[4] = cb_underrun;				// 1 - buffer underrun error
+assign status_wires[3] = cb_overrun;				// 1 - buffer overrun error
+assign status_wires[2] = cb_stack_overrun;			// 1 - write stack pointer overrun
+assign status_wires[1] = cb_invalid_operation;		// 1 - invalid operation (pushing and popping write index at the same time)
+assign status_wires[0] = cb_invalid_write_index; 	// 1 - popped invalid write index
 
 endmodule

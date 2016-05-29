@@ -45,7 +45,7 @@ module circullar_buffer(
 	reg stack_write_index_valid;
 	reg [ADDRESS_WIDTH - 1:0] read_index;
 
-	always @ (negedge i_clk or negedge i_rst_n) begin
+	always @(negedge i_clk or negedge i_rst_n) begin
 		if (!i_rst_n) begin
 			stack_overrun <= 1'b0;
 			invalid_operation <= 1'b0;
@@ -55,12 +55,14 @@ module circullar_buffer(
 		end else begin
 			case ({i_push_write_index, i_pop_write_index})
 				2'b00: begin
-					stack_overrun <= stack_overrun;
-					invalid_operation <= invalid_operation;
-					stack_write_index <= stack_write_index;
-					invalid_write_index <= invalid_write_index;
 				end
 				2'b01: begin
+					if (stack_write_index_valid == 1'b0) begin
+						invalid_write_index <= 1'b1;
+					end
+					if (write_index >= read_index != stack_write_index >= read_index) begin
+						stack_overrun <= 1'b1;
+					end
 					stack_write_index_valid <= 1'b0;
 				end
 				2'b10: begin
@@ -68,16 +70,13 @@ module circullar_buffer(
 					stack_write_index <= write_index;
 				end
 				2'b11: begin
-					stack_overrun <= stack_overrun;
 					invalid_operation <= 1'b1;
-					stack_write_index <= stack_write_index;
 				end
 			endcase
 		end
 	end
 
-
-	always @ (negedge i_clk or negedge i_rst_n) begin
+	always @(negedge i_clk or negedge i_rst_n) begin
 		if (!i_rst_n) begin
 			underrun <= 0;
 			overrun <= 0;
@@ -85,61 +84,35 @@ module circullar_buffer(
 			write_index <= 0;
 			read_index <= 0;
 		end else begin
-			if ({i_push_write_index, i_pop_write_index} == 2'b00) begin
+			if ({i_push_write_index, i_pop_write_index} == 2'b01) begin
+				write_index <= stack_write_index;
+			end else begin 
 				case ({i_write_en, i_read_en})
 					2'b00: begin
-						underrun <= underrun;
-						overrun <= overrun;
-						data_size <= data_size;
-						write_index <= write_index;
-						read_index <= read_index;
 					end
 					2'b01: begin
 						if (data_size == 0) begin
 							underrun <= 1'b1;
-							overrun <= overrun;
-							data_size <= data_size;
-							write_index <= write_index;
-							read_index <= read_index;
 						end else begin
-							underrun <= underrun;
-							overrun <= overrun;
 							data_size <= data_size - 1;
-							write_index <= write_index;
 							read_index <= read_index + 1;
 						end
 					end
 					2'b10: begin
 						if (data_size == (1 << ADDRESS_WIDTH) - 1) begin
-							underrun <= underrun;
 							overrun <= 1'b1;
-							data_size <= data_size;
-							write_index <= write_index;
-							read_index <= read_index;
 						end else begin
-							underrun <= underrun;
-							overrun <= overrun;
 							data_size <= data_size + 1;
 							write_index <= write_index + 1;
-							read_index <= read_index;
 							mem[write_index] <= i_data;
 						end
 					end
 					2'b11: begin
-						underrun <= underrun;
-						overrun <= overrun;
-						data_size <= data_size;
 						write_index <= write_index + 1;
 						read_index <= read_index + 1;
 						mem[write_index] <= i_data;
 					end
 				endcase // {i_write_en, i_read_en}
-			end else begin
-				underrun <= underrun;
-				overrun <= overrun;
-				data_size <= data_size;
-				write_index <= write_index;
-				read_index <= read_index;
 			end
 		end
 	end
