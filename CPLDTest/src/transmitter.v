@@ -1,4 +1,4 @@
-module m_transmitter(
+module transmitter(
 	i_clk,
 	i_clk_2x,
 	i_rst_n,
@@ -16,6 +16,8 @@ module m_transmitter(
 input i_clk;
 input i_clk_2x;
 input i_rst_n;
+input i_push_write_index;
+input i_pop_write_index;
 input [7:0] i_data;
 input i_data_we;
 input i_push_frame;
@@ -24,7 +26,7 @@ output [7:0] o_frames_count;
 output [15:0] o_status;
 output o_tx;
 
-// Status register
+// status register
 wire [15:0] status_wires;
 reg [15:0] status;
 

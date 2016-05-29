@@ -21,6 +21,8 @@ module circullar_buffer(
 	localparam ADDRESS_WIDTH = u_log2(BUFFER_SIZE);
 	input i_clk;
 	input i_rst_n;
+	input i_push_write_index;
+	input i_pop_write_index;
 	input i_write_en;
 	input i_read_en;
 	input [DATA_WIDTH - 1:0] i_data;
@@ -30,6 +32,7 @@ module circullar_buffer(
 	output o_underrun;
 	output o_overrun;
 	output o_stack_overrun;
+	output o_invalid_operation;
 	output o_invalid_write_index;
 
 	reg underrun;
