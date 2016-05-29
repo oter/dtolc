@@ -15,6 +15,11 @@ module top(
 
 	input i_clk;
 	input i_rst_n;
+	input i_sync;
+	input [3:0] i_cmd;
+	input [7:0] i_data;
+	output [7:0] o_data;
+	output o_sync;
 	output o_rx_int;
 	output o_tx_int;
 	output o_led_0;
