@@ -118,7 +118,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					tx_en <= 1'b0;
 				end else begin
 					state <= STATE_PREAMBLE;
-					processed_frames_count <= processed_frames_count + 1;
+					processed_frames_count <= processed_frames_count + 1'b1;
 					tx_en <= 1'b1;
 				end
 				tx_buffer <= 8'b0;

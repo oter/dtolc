@@ -1,4 +1,4 @@
-module m_transmitter_tb; 
+module transmitter_tb; 
 	reg clk;
 	reg clk2x;
 	reg rst_n;
