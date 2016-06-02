@@ -1,0 +1,48 @@
+EP3C10E144C8N IC CYCLONE III FPGA 10K 144-EQFP
+	463 hrn
+	http://www.kosmodrom.com.ua/el.php?name=EP3C10E144C8N
+
+EPCS4
+	30 hrn
+	http://www.kosmodrom.com.ua/el.php?name=EPCS4SI8N
+
+
+EPM240T100I5N MAX II
+	122 hrn
+	http://www.kosmodrom.com.ua/el.php?name=EPM240T100I5N
+
+USB-BLASTER
+	230 hrn
+	http://www.kosmodrom.com.ua/el.php?name=USB-BLASTER
+
+
+CDCM61001 
+	Ultra Low Jitter Crystal-In Clock Generator
+
+CDCS502
+	http://www.ti.com/lit/ds/scas868/scas868.pdf
+	Crystal Oscillator / Clock Generator with optional SSC
+
+TLC2933A
+	HIGH PERFOMANCE PHASE LOCKED LOOP
+
+Usefull links:
+	http://www.fpga4fun.com/CrossClockDomain2.html
+
+	http://www.aholme.co.uk/Ethernet/EthernetRx.htm
+
+	http://www.fpga4fun.com/10BASE-T4.html
+
+	FPGA
+	http://we.easyelectronics.ru/plis/obschie-principy-sozdaniya-otladochnoy-platy-dlya-plis.html
+
+TPS786 Ultralow-Noise, High-PSRR, Fast, RF, 1.5-A
+	Low-Dropout Linear Regulators
+
+http://www.ti.com/lit/ds/symlink/lm5134.pdf
+http://www.ti.com/lit/ds/symlink/lmh6526.pdf
+
+OPA657
+LMH6629
+
+
