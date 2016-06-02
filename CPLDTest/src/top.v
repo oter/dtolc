@@ -8,6 +8,7 @@ module top(
 	o_sync,
 	o_rx_int,
 	o_tx_int,
+	o_tx,
 
 	o_led_0,
 	o_led_1
@@ -22,6 +23,8 @@ module top(
 	output o_sync;
 	output o_rx_int;
 	output o_tx_int;
+	output o_tx; 
+
 	output o_led_0;
 	output o_led_1;
 
@@ -65,31 +68,53 @@ module top(
 		end
 	end
 
-	wire [7:0] tx_i_data;
-	wire tx_i_data_we;
-	wire [15:0] tx_o_data_count;
-	wire [7:0] tx_o_frames_count;
-	wire [7:0] tx_o_status;
-	wire [7:0] tx_o_tx;
-
-	wire push_write_index;
-	wire pop_write_index;
-	wire push_frame;
-
+	wire tx_rst_n;
+	wire tx_push_write_index;
+	wire tx_pop_write_index;
+	wire [7:0] tx_data;
+	wire tx_data_we;
+	wire tx_push_frame;
+	wire [15:0] tx_data_count;
+	wire [7:0] tx_frames_count;
+	wire [7:0] tx_status;
+	
 	transmitter tx_inst(
 		.i_clk(i_clk),
 		.i_clk_2x(c0),
-		.i_rst_n(i_rst_n),
-		.i_push_write_index(push_write_index),
-		.i_pop_write_index(pop_write_index),
-		.i_data(tx_i_data),
-		.i_data_we(tx_i_data_we),
-		.i_push_frame(push_frame),
-		.o_data_size(tx_o_data_count),
-		.o_frames_count(tx_o_frames_count),
-		.o_status(tx_o_status),
-		.o_tx(tx_o_tx)
+		.i_rst_n(tx_rst_n),
+		.i_push_write_index(tx_push_write_index),
+		.i_pop_write_index(tx_pop_write_index),
+		.i_data(tx_data),
+		.i_data_we(tx_data_we),
+		.i_push_frame(tx_push_frame),
+		.o_data_size(tx_data_count),
+		.o_frames_count(tx_frames_count),
+		.o_status(tx_status),
+		.o_tx(o_tx)
 	);
 
+
+	io_module io_module_inst(
+		.i_clk(i_clk),
+		.i_rst_n(i_rst_n),
+		.i_sync(i_sync),
+		.i_cmd(i_cmd),
+		.i_data(i_data),
+		.o_data(o_data),
+		.o_sync(o_sync),
+		.o_rx_int(o_rx_int),
+		.o_tx_int(o_tx_int),
+
+		// transmitter
+		.i_tx_data_size(tx_data_count),
+		.i_tx_frames_count(tx_frames_count),
+		.i_tx_status(tx_status),
+		.o_tx_rst_n(tx_rst_n),
+		.o_tx_push_write_index(tx_push_write_index),
+		.o_tx_pop_write_index(tx_pop_write_index),
+		.o_tx_data(tx_data),
+		.o_tx_data_we(tx_data_we),
+		.o_tx_push_frame(tx_push_frame),
+	);
 
 endmodule
