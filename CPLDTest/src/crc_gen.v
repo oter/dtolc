@@ -67,90 +67,90 @@ module crc_gen
     i_data_en,
     o_crc
 );
-input         i_rst_n;
-input         i_init;
-input         i_clk;
-input  [ 7:0] i_data;
-input         i_data_en;
+    input         i_rst_n;
+    input         i_init;
+    input         i_clk;
+    input  [ 7:0] i_data;
+    input         i_data_en;
 
-output [31:0] o_crc;
- 
-reg    [31:0] crc_out;
-reg    [31:0] crc_reg;
+    output [31:0] o_crc;
+     
+    reg    [31:0] crc_out;
+    reg    [31:0] crc_reg;
 
-// Input data width is 8bit, and the first bit is bit[0]
-function [31:0] NextCRC;
-    input [ 7:0] D;
-    input [31:0] C;
-    reg   [31:0] new_crc;
-    begin
-        new_crc[0] = C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[1] = C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[2] = C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[3] = C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
-        new_crc[4] = C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[5] = C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[6] = C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
-        new_crc[7] = C[31] ^ D[0] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ D[7];
-        new_crc[8] = C[0] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ D[6] ^ C[24] ^ D[7];
-        new_crc[9] = C[1] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ D[6];
-        new_crc[10] = C[2] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ D[7];
-        new_crc[11] = C[3] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ D[6] ^ C[24] ^ D[7];
-        new_crc[12] = C[4] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[13] = C[5] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
-        new_crc[14] = C[6] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[26] ^ D[5];
-        new_crc[15] = C[7] ^ C[31] ^ D[0] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[27] ^ D[4];
-        new_crc[16] = C[8] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[24] ^ D[7];
-        new_crc[17] = C[9] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[25] ^ D[6];
-        new_crc[18] = C[10] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[26] ^ D[5];
-        new_crc[19] = C[11] ^ C[31] ^ D[0] ^ C[27] ^ D[4];
-        new_crc[20] = C[12] ^ C[28] ^ D[3];
-        new_crc[21] = C[13] ^ C[29] ^ D[2];
-        new_crc[22] = C[14] ^ C[24] ^ D[7];
-        new_crc[23] = C[15] ^ C[25] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[24] = C[16] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
-        new_crc[25] = C[17] ^ C[27] ^ D[4] ^ C[26] ^ D[5];
-        new_crc[26] = C[18] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
-        new_crc[27] = C[19] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
-        new_crc[28] = C[20] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[26] ^ D[5];
-        new_crc[29] = C[21] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[27] ^ D[4];
-        new_crc[30] = C[22] ^ C[31] ^ D[0] ^ C[28] ^ D[3];
-        new_crc[31] = C[23] ^ C[29] ^ D[2];
-        NextCRC = new_crc;
-    end
-endfunction
-//******************************************************************************
+    // Input data width is 8bit, and the first bit is bit[0]
+    function [31:0] NextCRC;
+        input [ 7:0] D;
+        input [31:0] C;
+        reg   [31:0] new_crc;
+        begin
+            new_crc[0] = C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[1] = C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[2] = C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[3] = C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
+            new_crc[4] = C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[5] = C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ C[31] ^ D[0] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[6] = C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
+            new_crc[7] = C[31] ^ D[0] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ D[7];
+            new_crc[8] = C[0] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ D[6] ^ C[24] ^ D[7];
+            new_crc[9] = C[1] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ D[6];
+            new_crc[10] = C[2] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[24] ^ D[7];
+            new_crc[11] = C[3] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[25] ^ D[6] ^ C[24] ^ D[7];
+            new_crc[12] = C[4] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[26] ^ D[5] ^ C[25] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[13] = C[5] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[27] ^ D[4] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
+            new_crc[14] = C[6] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[26] ^ D[5];
+            new_crc[15] = C[7] ^ C[31] ^ D[0] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[27] ^ D[4];
+            new_crc[16] = C[8] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[24] ^ D[7];
+            new_crc[17] = C[9] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[25] ^ D[6];
+            new_crc[18] = C[10] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[26] ^ D[5];
+            new_crc[19] = C[11] ^ C[31] ^ D[0] ^ C[27] ^ D[4];
+            new_crc[20] = C[12] ^ C[28] ^ D[3];
+            new_crc[21] = C[13] ^ C[29] ^ D[2];
+            new_crc[22] = C[14] ^ C[24] ^ D[7];
+            new_crc[23] = C[15] ^ C[25] ^ D[6] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[24] = C[16] ^ C[26] ^ D[5] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
+            new_crc[25] = C[17] ^ C[27] ^ D[4] ^ C[26] ^ D[5];
+            new_crc[26] = C[18] ^ C[28] ^ D[3] ^ C[27] ^ D[4] ^ C[24] ^ C[30] ^ D[1] ^ D[7];
+            new_crc[27] = C[19] ^ C[29] ^ D[2] ^ C[28] ^ D[3] ^ C[25] ^ C[31] ^ D[0] ^ D[6];
+            new_crc[28] = C[20] ^ C[30] ^ D[1] ^ C[29] ^ D[2] ^ C[26] ^ D[5];
+            new_crc[29] = C[21] ^ C[31] ^ D[0] ^ C[30] ^ D[1] ^ C[27] ^ D[4];
+            new_crc[30] = C[22] ^ C[31] ^ D[0] ^ C[28] ^ D[3];
+            new_crc[31] = C[23] ^ C[29] ^ D[2];
+            NextCRC = new_crc;
+        end
+    endfunction
+    //******************************************************************************
 
-wire [31:0] next_crc = NextCRC(i_data, crc_reg);
+    wire [31:0] next_crc = NextCRC(i_data, crc_reg);
 
-always @(negedge i_clk or negedge i_rst_n)
-    if (i_rst_n) begin
-        crc_reg <= 32'hffffffff;
-    end else if (i_init) begin
-        crc_reg <= 32'hffffffff;
-    end else if (i_data_en) begin
-        crc_reg <= next_crc;
-    end
+    always @(negedge i_clk or negedge i_rst_n)
+        if (i_rst_n) begin
+            crc_reg <= 32'hffffffff;
+        end else if (i_init) begin
+            crc_reg <= 32'hffffffff;
+        end else if (i_data_en) begin
+            crc_reg <= next_crc;
+        end
 
 
-wire [31:0] crc_out_inv;
-genvar i;
-generate
-    for (i = 0; i < 32; i = i + 1) begin : GEN_CRC_OUT
-        assign crc_out_inv[i] = next_crc[31 - i];
-    end
-endgenerate
- 
-always @(negedge i_clk or negedge i_rst_n) begin
-    if (!i_rst_n) begin
-        crc_out <= 32'b0;
-    end else begin
-        if (i_data_en) begin
-            crc_out <= ~crc_out_inv;
+    wire [31:0] crc_out_inv;
+    genvar i;
+    generate
+        for (i = 0; i < 32; i = i + 1) begin : GEN_CRC_OUT
+            assign crc_out_inv[i] = next_crc[31 - i];
+        end
+    endgenerate
+     
+    always @(negedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            crc_out <= 32'b0;
+        end else begin
+            if (i_data_en) begin
+                crc_out <= ~crc_out_inv;
+            end
         end
     end
-end
 
-assign o_crc = crc_out;
+    assign o_crc = crc_out;
  
 endmodule
