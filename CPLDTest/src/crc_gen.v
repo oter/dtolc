@@ -65,6 +65,7 @@ module crc_gen
     i_init,
     i_data,
     i_data_en,
+    i_data_rd,
     o_crc
 );
     input         i_rst_n;
@@ -75,7 +76,7 @@ module crc_gen
 
     output [31:0] o_crc;
      
-    reg    [31:0] crc_out;
+    reg    [ 7:0] crc_out;
     reg    [31:0] crc_reg;
 
     // Input data width is 8bit, and the first bit is bit[0]
@@ -130,20 +131,21 @@ module crc_gen
             crc_reg <= 32'hffffffff;
         end else if (i_data_en) begin
             crc_reg <= next_crc;
+        end else if (i_data_rd) begin
+            crc_reg <= {crc_reg[23:0], 8'b1};
         end
 
-
-    wire [31:0] crc_out_inv;
+    wire [7:0] crc_out_inv;
     genvar i;
     generate
-        for (i = 0; i < 32; i = i + 1) begin : GEN_CRC_OUT
+        for (i = 0; i < 8; i = i + 1) begin : GEN_CRC_OUT
             assign crc_out_inv[i] = next_crc[31 - i];
         end
     endgenerate
      
     always @(negedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
-            crc_out <= 32'b0;
+            crc_out <= 8'b0;
         end else begin
             if (i_data_en) begin
                 crc_out <= ~crc_out_inv;
