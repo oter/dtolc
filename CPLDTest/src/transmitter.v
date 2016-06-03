@@ -2,6 +2,8 @@ module transmitter(
 	i_clk,
 	i_clk_2x,
 	i_rst_n,
+	i_local_rx_locked,
+	i_remote_rx_locked,
 	i_push_write_index,
 	i_pop_write_index,
 	i_data,
@@ -16,6 +18,8 @@ module transmitter(
 input i_clk;
 input i_clk_2x;
 input i_rst_n;
+input i_local_rx_locked;
+input i_remote_rx_locked;
 input i_push_write_index;
 input i_pop_write_index;
 input [7:0] i_data;
@@ -38,10 +42,19 @@ always @(posedge i_clk or negedge i_rst_n) begin
 	end
 end
 
-parameter PREAMBLE_SIZE = 64;
-parameter START_SIZE 	= 2;
-parameter DATA_SIZE 	= 8;
-parameter GAP_SIZE 		= 16;
+parameter MAX_FREQUENCY 	= 50_000_000;
+parameter SYNCED_GAP 		= (MAX_FREQUENCY / 1_000_000) * 2 * 1000;
+parameter START_MAGIC_SIZE 	= 32;
+parameter DATA_SIZE 		= 8;
+parameter GAP_SIZE 			= 16;
+
+localparam SYNCED_MAGIC_SIZE = 32;
+wire [SYNCED_MAGIC_SIZE - 1:0] synced_magic;
+assign synced_magic = 32'b1001_0110_1100_0011;
+
+wire [START_MAGIC_SIZE - 1:0] start_magic;
+assign start_magic = 32'b1110_1010_0101_0111;
+
 
 reg cb_read_en;
 wire [7:0] cb_o_data;
@@ -74,8 +87,7 @@ reg [7:0] processed_frames_count;
 reg [7:0] tx_buffer;
 reg [7:0] tx_counter;
 reg [15:0] data_size;
-reg [15:0] data_size_counter;
-reg tx_en;
+reg [19:0] data_size_counter;
 reg tx;
 reg bad_state;
 
@@ -95,55 +107,55 @@ always @(posedge i_clk_2x or negedge i_rst_n) begin
 end
 
 reg [3:0] state;
-localparam 	STATE_IDLE = 0, STATE_PREAMBLE = 1, STATE_START = 2, STATE_DATA_SIZE_0 = 3, 
+localparam 	STATE_SYNC = 0, STATE_SYNCED = 1, STATE_START = 2, STATE_DATA_SIZE_0 = 3, 
 		   	STATE_DATA_SIZE_1 = 4, STATE_DATA_BYTE = 5, STATE_GAP = 6;
 
 // FSM
 always @(posedge i_clk or negedge i_rst_n) begin
 	if (!i_rst_n) begin
-		state <= STATE_IDLE;
+		state <= STATE_SYNC;
 		processed_frames_count <= 8'b0;
 		tx_buffer <= 8'b0;
 		data_size <= 16'b0;
 		tx_counter <= 8'b0;
-		data_size_counter <= 16'b0;
-		tx_en <= 1'b0;
+		data_size_counter <= 20'b0;
 		bad_state <= 1'b0;
 		cb_read_en <= 1'b0;
 	end else begin
 		case (state)
-			STATE_IDLE: begin
-				if (frames_count == processed_frames_count) begin
-					state <= STATE_IDLE;
-					tx_en <= 1'b0;
+			STATE_SYNC: begin
+				if (i_local_rx_locked == 1'b0) begin
+					data_size_counter <= 20'b0;
+					tx_buffer <= 8'b0;
 				end else begin
-					state <= STATE_PREAMBLE;
-					processed_frames_count <= processed_frames_count + 1'b1;
-					tx_en <= 1'b1;
-				end
-				tx_buffer <= 8'b0;
+					if (i_remote_rx_locked && (frames_count != processed_frames_count)) begin
+						state <= STATE_START;
+						processed_frames_count <= processed_frames_count + 1'b1;
+						tx_buffer <= {7'b0, start_magic[0]};
+					end else begin
+						data_size_counter <= data_size_counter + 1'b1;
+						if (data_size_counter == SYNCED_GAP) begin
+							data_size_counter <= 20'b0;
+							state <= STATE_SYNCED;
+							tx_buffer <= {7'b0, synced_magic[0]};
+						end
+					end
+				end	
 				data_size <= 16'b0;
 				tx_counter <= 1'b1;
-				data_size_counter <= 16'b0;
 				cb_read_en <= 1'b0;
 			end
-			STATE_PREAMBLE: begin
-				if (tx_counter == PREAMBLE_SIZE) begin
-					tx_counter <= 1'b1; 
-					state <= STATE_START;
-					tx_buffer <= 8'b01;
-				end else begin
+			STATE_SYNCED: begin
+				if (tx_counter != SYNCED_MAGIC_SIZE) begin
 					tx_counter <= tx_counter + 1'b1;
-					state <= STATE_PREAMBLE;
-					tx_buffer <= 8'b0;
+					tx_buffer <= {7'b0, synced_magic[tx_counter[3:0]]};
+				end else begin
+					tx_counter <= 1'b1;
+					state <= STATE_SYNC;
 				end
-				tx_en <= 1'b1;	
-				data_size <= 16'b0;
-				data_size_counter <= 16'b0;
-				cb_read_en <= 1'b0;
 			end
 			STATE_START: begin
-				if (tx_counter == START_SIZE) begin
+				if (tx_counter == START_MAGIC_SIZE) begin
 					tx_counter <= 1'b1; 
 					state <= STATE_DATA_SIZE_0;
 					data_size <= {8'b0, cb_o_data};
@@ -152,11 +164,10 @@ always @(posedge i_clk or negedge i_rst_n) begin
 				end else begin
 					tx_counter <= tx_counter + 1'b1;
 					state <= STATE_START;
-					tx_buffer <= 8'b00000001;
+					tx_buffer <= {7'b0, start_magic[tx_counter]};
 					cb_read_en <= 1'b0;
 				end
-				tx_en <= 1'b1;
-				data_size_counter <= 16'b0;
+				data_size_counter <= 20'b0;
 			end
 			STATE_DATA_SIZE_0: begin
 				if (tx_counter == DATA_SIZE) begin
@@ -171,59 +182,53 @@ always @(posedge i_clk or negedge i_rst_n) begin
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
 					cb_read_en <= 1'b0;
 				end
-				tx_en <= 1'b1;
-				data_size_counter <= 16'b0;
+				data_size_counter <= 20'b0;
 			end
 			STATE_DATA_SIZE_1: begin
 				if (tx_counter == DATA_SIZE) begin
 					tx_counter <= 8'b01;
-					data_size_counter <= 16'b01;
+					data_size_counter <= 20'b01;
 					state <= STATE_DATA_BYTE;
 					tx_buffer <= cb_o_data;
 					cb_read_en <= 1'b1;
 				end else begin
 					tx_counter <= tx_counter + 1'b1;
-					data_size_counter <= 16'b0;
+					data_size_counter <= 20'b0;
 					state <= STATE_DATA_SIZE_1;
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
 					cb_read_en <= 1'b0;
 				end
-				tx_en <= 1'b1;
 			end
 			STATE_DATA_BYTE: begin
 				if (tx_counter == DATA_SIZE) begin
 					tx_counter <= 8'b01; 
 					if (data_size_counter == data_size) begin	
 						state <= STATE_GAP;
-						tx_en <= 1'b0;
 						cb_read_en <= 1'b0;
 					end else begin 
 						data_size_counter <= data_size_counter + 1'b1;
 						state <= STATE_DATA_BYTE;
-						tx_en <= 1'b1;
 						tx_buffer <= cb_o_data;
 						cb_read_en <= 1'b1;
 					end
 				end else begin
 					state <= STATE_DATA_BYTE;
 					tx_counter <= tx_counter + 1'b1;
-					tx_en <= 1'b1;
 					cb_read_en <= 1'b0;
 					tx_buffer <= {1'b0, tx_buffer[7:1]};
 				end
 			end
 			STATE_GAP: begin
 				if (tx_counter == GAP_SIZE) begin
-					state <= STATE_IDLE;
+					state <= STATE_SYNC;
 				end else begin
 					state <= STATE_GAP;
 				end
-				tx_en <= 1'b0;
 				tx_counter <= tx_counter + 1'b1;
 				cb_read_en <= 1'b0;
 			end
 			default: begin
-				state <= STATE_IDLE; // return from the undefined state
+				state <= STATE_SYNC; // return from the undefined state
 				bad_state <= 1'b1;
 			end
 		endcase
@@ -235,11 +240,7 @@ always @(negedge i_clk_2x or negedge i_rst_n) begin
 	if (!i_rst_n) begin
 		tx <= 0;
 	end else begin
-		if (tx_en == 1'b1) begin
-			tx <= i_clk ^ tx_buffer[0];
-		end else begin
-			tx <= 1'b0;
-		end
+		tx <= i_clk ^ tx_buffer[0];	
 	end
 end
 
@@ -250,7 +251,9 @@ assign o_status = status;
 
 assign status_wires[15] = data_size == 0;			// 1 - No data to transmit, 0 - data is available
 assign status_wires[14] = frames_count != 0; 		// 1 - frames are available, 0 - no frames
-assign status_wires[13] = state != STATE_IDLE; 		// 1 - transmitting, 0 - idle
+assign status_wires[13] = (state != STATE_SYNC) && 	// 1 - transmitting, 0 - idle
+						  (state != STATE_SYNCED);
+
 assign status_wires[12] = 0;
 assign status_wires[11] = state[3];					// state bit 3
 assign status_wires[10] = state[2];					// state bit 2
