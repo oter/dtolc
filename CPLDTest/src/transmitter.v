@@ -249,8 +249,8 @@ assign o_tx = tx;
 assign o_data_size = cb_o_data_size;
 assign o_status = status;
 
-assign status_wires[15] = data_size == 0;			// 1 - No data to transmit, 0 - data is available
-assign status_wires[14] = frames_count != 0; 		// 1 - frames are available, 0 - no frames
+assign status_wires[15] = data_size == 16'b0;		// 1 - No data to transmit, 0 - data is available
+assign status_wires[14] = frames_count != 8'b0; 	// 1 - frames are available, 0 - no frames
 assign status_wires[13] = (state != STATE_SYNC) && 	// 1 - transmitting, 0 - idle
 						  (state != STATE_SYNCED);
 
