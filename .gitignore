@@ -1,3 +1,10 @@
+LaserSchematic/LaserSchematic/__Previews/*
+pll/db/*
+pll/greybox_tmp/*
+pll/output_files/*
+pll/pll_example_restored/*
+pll/incremental_db/*
+pll/simulation/*
 .metadata
 .launches
 .settings
