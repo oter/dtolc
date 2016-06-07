@@ -32,3 +32,4 @@ CPLDTest/top.qws
 *.exe
 *.log
 *.bak
+*.user
