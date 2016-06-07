@@ -18,7 +18,7 @@ module io_module(
 	o_tx_pop_write_index,
 	o_tx_data,
 	o_tx_data_we,
-	o_tx_push_frame,
+	o_tx_push_frame
 
 	);
 	
@@ -63,12 +63,12 @@ module io_module(
 	localparam CMD_TX_BYTE 		= 4'b0110;
 	localparam CMD_RX_TX_BYTE 	= 4'b01??;
 
-	localparam IO_STATE_IDLE 	= 0;
-	localparam IO_STATE_IO 		= 1;
+	localparam IO_STATE_IDLE 	= 2'b00;
+	localparam IO_STATE_IO 		= 2'b01;
 
-	localparam TX_STATE_SIZE_0 	= 0;
-	localparam TX_STATE_SIZE_1 	= 1;
-	localparam TX_STATE_DATA 	= 2;
+	localparam TX_STATE_SIZE_0 	= 3'b000;
+	localparam TX_STATE_SIZE_1 	= 3'b001;
+	localparam TX_STATE_DATA 	= 3'b010;
 	
 	reg [2:0] rx_state;
 	reg [2:0] tx_state;
@@ -80,10 +80,10 @@ module io_module(
 	reg [7:0] output_data;
 
 	reg [7:0] invalid_commands_count; // done
-
+	
 	always @(negedge i_clk or negedge i_rst_n) begin
 		if (!i_rst_n) begin
-			tx_state <= TX_STATE_IDLE;
+			tx_state <= TX_STATE_SIZE_0;
 			io_state <= IO_STATE_IDLE;
 			sync <= 1'b0;
 			cmd <= 4'b0;
@@ -91,12 +91,10 @@ module io_module(
 			output_data <= 8'b0;
 			invalid_commands_count <= 8'b0;
 			tx_counter <= 16'b0;
-			genvar i;
-			generate
-				for (i = 0; i < 4; i = i + 1) begin : REGS_INIT
-					assign regs_wire_map[i] <= 8'b0;
-				end
-			endgenerate
+			regs_map[0] <= 8'b0;
+			regs_map[1] <= 8'b0;
+			regs_map[2] <= 8'b0;
+			regs_map[3] <= 8'b0;
 		end else begin
 			casez(io_state)
 				IO_STATE_IDLE: begin
@@ -109,7 +107,7 @@ module io_module(
 				IO_STATE_IO: begin
 					sync <= i_sync;
 					io_state <= IO_STATE_IDLE;
-					if (o_tx_rst_n /*&& TODO: for rx*/) begin
+					if (!o_tx_rst_n /*&& TODO: for rx*/) begin
 						casez(cmd)
 							CMD_IDLE: begin
 							end
@@ -124,7 +122,7 @@ module io_module(
 							// end
 							// CMD_TX_BYTE: begin
 							// end
-							CMD_TX_RX_BYTE: begin
+							CMD_RX_TX_BYTE: begin
 								if (cmd[0]) begin // rx
 
 								end
@@ -132,6 +130,8 @@ module io_module(
 									casez(tx_state)
 										TX_STATE_SIZE_0: begin
 											tx_counter <= 16'b01;
+											
+											tx_state <= TX_STATE_SIZE_1; // TODO: Remove this:
 										end
 										TX_STATE_SIZE_1: begin
 
@@ -140,7 +140,7 @@ module io_module(
 
 										end
 										default: begin
-											tx_state <= TX_STATE_IDLE;
+											tx_state <= TX_STATE_SIZE_0;
 										end
 									endcase
 								end
@@ -161,7 +161,7 @@ module io_module(
 	genvar i;
 	generate
 		for (i = 0; i < 4; i = i + 1) begin : REGS_ASSIGN
-			assign regs_wire_map[i] = regs_map;
+			assign regs_wire_map[i] = regs_map[i];
 		end
 	endgenerate
 
@@ -172,7 +172,7 @@ module io_module(
 	assign regs_wire_map[11] = 0;
 	assign regs_wire_map[10] = 0;
 	assign regs_wire_map[9]  = 0;
-	assign regs_wire_map[8]  = i_tx_data_size[15:0];
+	assign regs_wire_map[8]  = i_tx_data_size[15:8];
 	assign regs_wire_map[7]  = i_tx_data_size[7:0];
 	assign regs_wire_map[6]  = i_tx_frames_count;
 	assign regs_wire_map[5]  = i_tx_status[15:8];
@@ -187,5 +187,8 @@ module io_module(
 	assign o_data = output_data;
 	assign o_sync = sync;
 	assign o_tx_data = input_data;
+	
+	assign o_rx_int = 1'b1; // TODO: Remove this
+	assign o_tx_int = 1'b1; // TODO: Remove this
 
 endmodule // io_module

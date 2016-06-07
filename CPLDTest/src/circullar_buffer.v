@@ -17,7 +17,7 @@ module circullar_buffer(
 	`include "utils.vh"
 
 	parameter DATA_WIDTH = 8;
-	parameter BUFFER_SIZE = 256;
+	parameter BUFFER_SIZE = 512;
 	localparam ADDRESS_WIDTH = u_log2(BUFFER_SIZE);
 	input i_clk;
 	input i_rst_n;
@@ -41,7 +41,7 @@ module circullar_buffer(
 	reg invalid_operation;
 	reg invalid_write_index;
 
-	reg [DATA_WIDTH - 1:0] mem[0:BUFFER_SIZE - 1];
+	reg [DATA_WIDTH - 1:0] mem[0:BUFFER_SIZE - 1] /* synthesis ramstyle = M20K */;
 	reg [15:0] data_size;
 	reg [ADDRESS_WIDTH - 1:0] write_index;
 	reg [ADDRESS_WIDTH - 1:0] stack_write_index;
@@ -97,22 +97,22 @@ module circullar_buffer(
 						if (data_size == 0) begin
 							underrun <= 1'b1;
 						end else begin
-							data_size <= data_size - 1;
-							read_index <= read_index + 1;
+							data_size <= data_size - 1'b1;
+							read_index <= read_index + 1'b1;
 						end
 					end
 					2'b10: begin
-						if (data_size == (1 << ADDRESS_WIDTH) - 1) begin
+						if (data_size == (1'b1 << ADDRESS_WIDTH) - 1'b1) begin
 							overrun <= 1'b1;
 						end else begin
-							data_size <= data_size + 1;
-							write_index <= write_index + 1;
+							data_size <= data_size + 1'b1;
+							write_index <= write_index + 1'b1;
 							mem[write_index] <= i_data;
 						end
 					end
 					2'b11: begin
-						write_index <= write_index + 1;
-						read_index <= read_index + 1;
+						write_index <= write_index + 1'b1;
+						read_index <= read_index + 1'b1;
 						mem[write_index] <= i_data;
 					end
 				endcase // {i_write_en, i_read_en}

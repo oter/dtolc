@@ -91,7 +91,7 @@ reg [19:0] data_size_counter;
 reg tx;
 reg bad_state;
 
-assign tx_bit = tx_buffer[0];
+//assign tx_bit = tx_buffer[0];
 
 // TODO: posedge i_clk_2x or i_clk??
 always @(posedge i_clk_2x or negedge i_rst_n) begin
@@ -107,8 +107,8 @@ always @(posedge i_clk_2x or negedge i_rst_n) begin
 end
 
 reg [3:0] state;
-localparam 	STATE_SYNC = 0, STATE_SYNCED = 1, STATE_START = 2, STATE_DATA_SIZE_0 = 3, 
-		   	STATE_DATA_SIZE_1 = 4, STATE_DATA_BYTE = 5, STATE_GAP = 6;
+localparam 	STATE_SYNC = 4'b0000, STATE_SYNCED = 4'b0001, STATE_START = 4'b0010, STATE_DATA_SIZE_0 = 4'b0011, 
+		   	STATE_DATA_SIZE_1 = 4'b0100, STATE_DATA_BYTE = 4'b0101, STATE_GAP = 4'b0110;
 
 // FSM
 always @(posedge i_clk or negedge i_rst_n) begin
@@ -148,7 +148,7 @@ always @(posedge i_clk or negedge i_rst_n) begin
 			STATE_SYNCED: begin
 				if (tx_counter != SYNCED_MAGIC_SIZE) begin
 					tx_counter <= tx_counter + 1'b1;
-					tx_buffer <= {7'b0, synced_magic[tx_counter[3:0]]};
+					tx_buffer <= {7'b0, synced_magic[tx_counter[4:0]]};
 				end else begin
 					tx_counter <= 1'b1;
 					state <= STATE_SYNC;

@@ -28,11 +28,6 @@ module top(
 	output o_led_0;
 	output o_led_1;
 
-
-	assign o_data = output_data;
-	assign o_sync = sync;
-
-
 	reg led;
 	reg [31:0] counter;
 
@@ -77,11 +72,18 @@ module top(
 	wire [15:0] tx_data_count;
 	wire [7:0] tx_frames_count;
 	wire [7:0] tx_status;
+
+	wire local_rx_locked;
+	wire remote_rx_locked;
+	assign local_rx_locked = 1'b1;
+	assign remote_rx_locked = 1'b1;
 	
 	transmitter tx_inst(
 		.i_clk(i_clk),
 		.i_clk_2x(c0),
 		.i_rst_n(tx_rst_n),
+		.i_local_rx_locked(local_rx_locked),
+		.i_remote_rx_locked(remote_rx_locked),
 		.i_push_write_index(tx_push_write_index),
 		.i_pop_write_index(tx_pop_write_index),
 		.i_data(tx_data),
@@ -94,7 +96,7 @@ module top(
 	);
 
 
-	io_module io_module_inst(
+	io_module im_inst(
 		.i_clk(i_clk),
 		.i_rst_n(i_rst_n),
 		.i_sync(i_sync),
@@ -114,7 +116,7 @@ module top(
 		.o_tx_pop_write_index(tx_pop_write_index),
 		.o_tx_data(tx_data),
 		.o_tx_data_we(tx_data_we),
-		.o_tx_push_frame(tx_push_frame),
+		.o_tx_push_frame(tx_push_frame)
 	);
 
 endmodule
