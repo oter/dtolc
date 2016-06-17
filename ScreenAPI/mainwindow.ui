@@ -173,7 +173,7 @@
       </spacer>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton">
+      <widget class="QPushButton" name="pbRefresh">
        <property name="text">
         <string>Refresh</string>
        </property>
