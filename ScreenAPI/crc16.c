@@ -11,7 +11,7 @@
 // represent the 17 bit value.
 */
 
-uint16_t crc16(char *data_ptr, uint16_t length)
+uint16_t calc_crc16(char *data_ptr, uint16_t length)
 {
     uint8_t i;
     uint32_t data;
