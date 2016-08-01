@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 
+#include "comportinterface.h"
+
 namespace Ui {
 class MainWindow;
 }
@@ -11,12 +13,6 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
-    enum class ConnectionStatus
-    {
-        kConnected,
-        kDisconnected
-    };
-
 public:
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
@@ -24,9 +20,15 @@ public:
 private slots:
     void on_pbRefresh_clicked();
 
+    void on_pbConnect_clicked();
+
+    void OnComPortConnected();
+    void OnComPortDisconnected();
+
 private:
     Ui::MainWindow *ui;
-    ConnectionStatus connectionStatus;
+    ComPortInterface m_com_interface;
+
 };
 
 #endif // MAINWINDOW_H
