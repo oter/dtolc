@@ -14,10 +14,12 @@ TEMPLATE = app
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    crc16.c
+    crc16.c \
+    comportinterface.cpp
 
 HEADERS  += mainwindow.h \
     screen_proto.h \
-    crc16.h
+    crc16.h \
+    comportinterface.h
 
 FORMS    += mainwindow.ui
